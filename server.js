@@ -972,9 +972,13 @@ async function route(req, res) {
   }
 
   if (url.pathname === "/api/config") {
+    const isLocal = isLocalRequest(req);
+    const config = await getConfig(req);
+
     writeJson(res, 200, {
-      ...(await getConfig(req)),
-      canChooseDestination: isLocalRequest(req)
+      ...config,
+      addresses: isLocal ? config.addresses : [],
+      canChooseDestination: isLocal
     });
     return;
   }

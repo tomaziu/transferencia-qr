@@ -60,6 +60,8 @@ function setConnection(online) {
 
 function renderAddresses(addresses) {
   addressList.innerHTML = "";
+  addressList.hidden = !addresses.length;
+
   for (const item of addresses) {
     const row = document.createElement("div");
     row.className = "address-item";
@@ -98,6 +100,10 @@ function applyConfig(config, { notify = false } = {}) {
       destinationBox.hidden = true;
       destinationLoaded = false;
     });
+  } else if (!config.canChooseDestination) {
+    destinationBox.hidden = true;
+    destinationLoaded = false;
+    closeFolderModal();
   }
 }
 
