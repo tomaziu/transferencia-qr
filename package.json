@@ -1,0 +1,12 @@
+{
+  "name": "transferencia-qr-rede",
+  "version": "1.0.0",
+  "description": "Transferencia de arquivos pela rede local com QR Code e barra de progresso.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  }
+}

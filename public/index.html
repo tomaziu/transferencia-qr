@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Transferencia por QR Code</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+    <script src="/assets/app.js" defer></script>
+  </head>
+  <body class="desktop">
+    <main class="shell">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Rede local</p>
+          <h1>Receber arquivos</h1>
+          <p class="lede">Escaneie o QR Code com o celular e acompanhe a transferencia em tempo real.</p>
+        </div>
+
+        <div class="status-strip" aria-live="polite">
+          <span class="status-dot" id="connectionDot"></span>
+          <span id="connectionText">Conectando...</span>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <div class="qr-panel">
+          <div class="qr-box">
+            <img id="qrImage" alt="QR Code para enviar arquivos" width="312" height="312">
+            <div class="qr-loader" id="qrLoader">Gerando QR Code</div>
+          </div>
+
+          <div class="link-row">
+            <input id="sendLink" type="text" readonly aria-label="Link para abrir no celular">
+            <button id="copyButton" type="button" class="icon-button" title="Copiar link" aria-label="Copiar link">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 8h10v12H8z"></path>
+                <path d="M6 16H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+          </div>
+
+          <div class="address-list" id="addressList"></div>
+
+          <div class="destination-box" id="destinationBox" hidden>
+            <div>
+              <p class="eyebrow">Destino</p>
+              <strong id="currentDestination">Carregando...</strong>
+            </div>
+            <button id="openFolderButton" type="button" class="icon-button" title="Escolher pasta" aria-label="Escolher pasta">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 7h6l2 2h10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <path d="M3 7V5a2 2 0 0 1 2-2h4l2 2h4a2 2 0 0 1 2 2"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="transfer-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Progresso</p>
+              <h2 id="currentTitle">Aguardando arquivo</h2>
+            </div>
+            <strong id="percentLabel">0%</strong>
+          </div>
+
+          <div class="progress-track" aria-label="Progresso da transferencia">
+            <span class="progress-fill" id="progressFill"></span>
+          </div>
+
+          <div class="metrics">
+            <div>
+              <span>Recebido</span>
+              <strong id="receivedMetric">0 B</strong>
+            </div>
+            <div>
+              <span>Velocidade</span>
+              <strong id="speedMetric">0 B/s</strong>
+            </div>
+            <div>
+              <span>Tempo restante</span>
+              <strong id="etaMetric">--</strong>
+            </div>
+          </div>
+
+          <div class="empty-state" id="emptyState">
+            <span></span>
+            <p>Nenhum envio ativo.</p>
+          </div>
+
+          <div class="history">
+            <div class="history-heading">
+              <h3>Recebidos</h3>
+              <span id="historyCount">0</span>
+            </div>
+            <div class="history-list" id="historyList"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="modal-backdrop hidden" id="folderModal">
+      <section class="folder-dialog" role="dialog" aria-modal="true" aria-labelledby="folderTitle">
+        <header class="folder-header">
+          <h2 id="folderTitle">Pasta de destino</h2>
+          <button id="closeFolderButton" type="button" class="icon-button ghost-button" title="Fechar" aria-label="Fechar">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18 6 6 18"></path>
+              <path d="m6 6 12 12"></path>
+            </svg>
+          </button>
+        </header>
+
+        <div class="folder-path-row">
+          <button id="folderUpButton" type="button" class="icon-button secondary-icon" title="Voltar" aria-label="Voltar">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m12 19-7-7 7-7"></path>
+              <path d="M19 12H5"></path>
+            </svg>
+          </button>
+          <input id="folderPathInput" type="text" aria-label="Caminho da pasta">
+        </div>
+
+        <div class="root-list" id="rootList"></div>
+        <div class="folder-list" id="folderList"></div>
+        <p class="folder-error" id="folderError" role="alert"></p>
+
+        <footer class="dialog-actions">
+          <button id="saveFolderButton" type="button" class="primary-button compact-button">Usar esta pasta</button>
+        </footer>
+      </section>
+    </div>
+  </body>
+</html>

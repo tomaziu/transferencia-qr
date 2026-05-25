@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Enviar arquivos</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+    <script src="/assets/send.js" defer></script>
+  </head>
+  <body class="mobile">
+    <main class="phone-shell">
+      <section class="phone-hero">
+        <p class="eyebrow">Conectado</p>
+        <h1>Enviar arquivos</h1>
+        <p class="lede">Escolha os arquivos e mantenha esta tela aberta ate terminar.</p>
+      </section>
+
+      <section class="send-panel">
+        <label class="file-picker">
+          <input id="fileInput" type="file" multiple>
+          <span class="file-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 5v14"></path>
+              <path d="M5 12h14"></path>
+            </svg>
+          </span>
+          <strong>Selecionar arquivos</strong>
+        </label>
+
+        <button id="sendButton" type="button" class="primary-button" disabled>Enviar</button>
+
+        <div class="queue" id="queue"></div>
+      </section>
+    </main>
+  </body>
+</html>

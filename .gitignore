@@ -1,0 +1,5 @@
+node_modules/
+recebidos/
+transferencia-config.json
+npm-debug.log*
+*.local
