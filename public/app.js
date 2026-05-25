@@ -2,6 +2,7 @@ const qrImage = document.querySelector("#qrImage");
 const qrLoader = document.querySelector("#qrLoader");
 const sendLink = document.querySelector("#sendLink");
 const copyButton = document.querySelector("#copyButton");
+const qrNotice = document.querySelector("#qrNotice");
 const addressList = document.querySelector("#addressList");
 const connectionDot = document.querySelector("#connectionDot");
 const connectionText = document.querySelector("#connectionText");
@@ -28,6 +29,8 @@ const saveFolderButton = document.querySelector("#saveFolderButton");
 
 let currentFolder = null;
 let parentFolder = null;
+let currentSendUrl = "";
+let destinationLoaded = false;
 
 function formatBytes(bytes) {
   if (!bytes) return "0 B";
@@ -62,6 +65,39 @@ function renderAddresses(addresses) {
     row.className = "address-item";
     row.innerHTML = `<span>${item.name}</span><strong>${item.address}</strong>`;
     addressList.append(row);
+  }
+}
+
+function showQrNotice(message) {
+  qrNotice.textContent = message;
+  qrNotice.classList.remove("hidden");
+}
+
+function applyConfig(config, { notify = false } = {}) {
+  const changed = currentSendUrl && currentSendUrl !== config.sendUrl;
+  const shouldUpdateQr = !currentSendUrl || changed;
+  currentSendUrl = config.sendUrl;
+
+  if (shouldUpdateQr) {
+    qrImage.addEventListener("load", () => qrLoader.classList.add("hidden"), { once: true });
+    qrImage.src = config.qrCode;
+    if (qrImage.complete) qrLoader.classList.add("hidden");
+  }
+
+  sendLink.value = config.sendUrl;
+  renderAddresses(config.addresses || []);
+
+  if (changed && notify) {
+    showQrNotice("QR Code renovado. O codigo antigo expirou; escaneie este novo QR.");
+  }
+
+  if (config.canChooseDestination && !destinationLoaded) {
+    destinationBox.hidden = false;
+    destinationLoaded = true;
+    loadDestination().catch(() => {
+      destinationBox.hidden = true;
+      destinationLoaded = false;
+    });
   }
 }
 
@@ -259,15 +295,16 @@ async function saveDestination() {
 async function loadConfig() {
   const response = await fetch("/api/config");
   const config = await response.json();
-  qrImage.addEventListener("load", () => qrLoader.classList.add("hidden"), { once: true });
-  qrImage.src = config.qrCode;
-  if (qrImage.complete) qrLoader.classList.add("hidden");
-  sendLink.value = config.sendUrl;
-  renderAddresses(config.addresses || []);
+  applyConfig(config);
+}
 
-  if (config.canChooseDestination) {
-    destinationBox.hidden = false;
-    await loadDestination();
+async function checkQrCodeFreshness() {
+  try {
+    const response = await fetch("/api/config", { cache: "no-store" });
+    const config = await response.json();
+    applyConfig(config, { notify: true });
+  } catch {
+    setConnection(false);
   }
 }
 
@@ -319,3 +356,4 @@ loadConfig().catch(() => {
   qrLoader.textContent = "Nao foi possivel gerar o QR Code";
 });
 connectEvents();
+setInterval(checkQrCodeFreshness, 15000);

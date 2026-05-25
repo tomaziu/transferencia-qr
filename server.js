@@ -32,6 +32,8 @@ const history = [];
 let cachedConfig = null;
 let uploadDir = DEFAULT_UPLOAD_DIR;
 
+const EXPIRED_QR_MESSAGE = "QR Code expirado. Atualize a pagina no computador e escaneie novamente.";
+
 function getLanAddresses() {
   const results = [];
   const interfaces = os.networkInterfaces();
@@ -515,7 +517,7 @@ function validateKey(url) {
 
 async function handleUpload(req, res, url) {
   if (!validateKey(url)) {
-    serveText(res, 403, "Chave invalida");
+    serveText(res, 403, EXPIRED_QR_MESSAGE);
     req.resume();
     return;
   }
@@ -616,7 +618,7 @@ async function handleUpload(req, res, url) {
 
 async function handleUploadStart(req, res, url) {
   if (!validateKey(url)) {
-    writeJson(res, 403, { ok: false, error: "Chave invalida" });
+    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
     req.resume();
     return;
   }
@@ -698,7 +700,7 @@ async function handleUploadStart(req, res, url) {
 
 async function handleUploadStatus(req, res, url) {
   if (!validateKey(url)) {
-    writeJson(res, 403, { ok: false, error: "Chave invalida" });
+    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
     return;
   }
 
@@ -731,7 +733,7 @@ async function handleUploadStatus(req, res, url) {
 
 async function handleUploadChunk(req, res, url) {
   if (!validateKey(url)) {
-    writeJson(res, 403, { ok: false, error: "Chave invalida" });
+    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
     req.resume();
     return;
   }
@@ -834,7 +836,7 @@ async function handleUploadChunk(req, res, url) {
 
 async function handleUploadFinish(req, res, url) {
   if (!validateKey(url)) {
-    writeJson(res, 403, { ok: false, error: "Chave invalida" });
+    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
     req.resume();
     return;
   }
@@ -962,7 +964,7 @@ async function route(req, res) {
 
   if (url.pathname === "/send") {
     if (!validateKey(url)) {
-      serveText(res, 403, "QR Code expirado ou invalido.", "text/html; charset=utf-8");
+      await serveStatic(res, path.join(PUBLIC_DIR, "expired.html"));
       return;
     }
     await serveStatic(res, path.join(PUBLIC_DIR, "send.html"));
