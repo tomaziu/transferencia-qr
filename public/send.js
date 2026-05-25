@@ -4,11 +4,15 @@ const queue = document.querySelector("#queue");
 const sizeAdvice = document.querySelector("#sizeAdvice");
 const sizeAdviceTitle = document.querySelector("#sizeAdviceTitle");
 const sizeAdviceText = document.querySelector("#sizeAdviceText");
+const resumeAdvice = document.querySelector("#resumeAdvice");
+const resumeAdviceTitle = document.querySelector("#resumeAdviceTitle");
+const resumeAdviceText = document.querySelector("#resumeAdviceText");
 const key = new URLSearchParams(window.location.search).get("key") || "";
 
 const DEFAULT_CHUNK_SIZE = 1024 * 1024;
 const MAX_CHUNK_RETRIES = 3;
 const ONE_GB = 1024 * 1024 * 1024;
+const PENDING_UPLOADS_KEY = "transferenciaQrPendingUploads";
 
 let selectedFiles = [];
 let sending = false;
@@ -64,6 +68,60 @@ function escapeHtml(value) {
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getPendingUploads() {
+  try {
+    const items = JSON.parse(localStorage.getItem(PENDING_UPLOADS_KEY) || "[]");
+    return Array.isArray(items) ? items : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePendingUploads(items) {
+  localStorage.setItem(PENDING_UPLOADS_KEY, JSON.stringify(items.slice(0, 12)));
+}
+
+function rememberPendingUpload(fileInfo, received = 0) {
+  const pending = getPendingUploads().filter((item) => item.id !== fileInfo.id);
+  pending.unshift({
+    id: fileInfo.id,
+    name: fileInfo.name,
+    size: fileInfo.size,
+    lastModified: fileInfo.file?.lastModified || fileInfo.lastModified || 0,
+    received,
+    updatedAt: Date.now()
+  });
+  savePendingUploads(pending);
+}
+
+function forgetPendingUpload(id) {
+  savePendingUploads(getPendingUploads().filter((item) => item.id !== id));
+  renderPendingNotice();
+}
+
+function matchingPendingUpload(fileInfo) {
+  return getPendingUploads().find((item) =>
+    item.id === fileInfo.id ||
+    (item.name === fileInfo.name && item.size === fileInfo.size && item.lastModified === fileInfo.file.lastModified)
+  );
+}
+
+function renderPendingNotice() {
+  const pending = getPendingUploads();
+
+  if (!pending.length) {
+    resumeAdvice.className = "resume-advice hidden";
+    resumeAdviceTitle.textContent = "";
+    resumeAdviceText.textContent = "";
+    return;
+  }
+
+  const [latest] = pending;
+  resumeAdvice.className = "resume-advice";
+  resumeAdviceTitle.textContent = `Envio pausado: ${latest.name}`;
+  resumeAdviceText.textContent = `Selecione o mesmo arquivo (${formatBytes(latest.size)}) e toque em Enviar para continuar do ponto salvo.`;
 }
 
 function isHostedSite() {
@@ -136,6 +194,14 @@ function renderQueue() {
       </div>
     `;
     queue.append(item);
+
+    if (file.pending) {
+      updateItem(file.id, {
+        percent: file.size > 0 ? (file.pending.received / file.size) * 100 : 0,
+        status: `Pronto para retomar de ${formatBytes(file.pending.received)}`,
+        eta: "toque Enviar"
+      });
+    }
   }
 }
 
@@ -276,6 +342,8 @@ async function uploadFile(fileInfo) {
     });
   }
 
+  rememberPendingUpload(fileInfo, offset);
+
   while (offset < fileInfo.size) {
     const end = Math.min(offset + chunkSize, fileInfo.size);
     const chunk = fileInfo.file.slice(offset, end);
@@ -285,6 +353,7 @@ async function uploadFile(fileInfo) {
       try {
         const result = await uploadChunk(fileInfo, offset, chunk, startedAt, baseOffset);
         offset = Math.min(Number(result.received || end), fileInfo.size);
+        rememberPendingUpload(fileInfo, offset);
         updateProgress(fileInfo, offset, startedAt, baseOffset);
         break;
       } catch (error) {
@@ -319,6 +388,7 @@ async function uploadFile(fileInfo) {
   }
 
   await finishUpload(fileInfo);
+  forgetPendingUpload(fileInfo.id);
   updateItem(fileInfo.id, {
     percent: 100,
     status: "Enviado",
@@ -337,12 +407,18 @@ fileInput.addEventListener("change", async () => {
       id: await createFileId(file),
       file,
       name: file.name,
-      size: file.size
+      size: file.size,
+      pending: null
     }))
   );
+  selectedFiles = selectedFiles.map((fileInfo) => ({
+    ...fileInfo,
+    pending: matchingPendingUpload(fileInfo) || null
+  }));
 
   renderQueue();
   renderSizeAdvice();
+  renderPendingNotice();
   sendButton.textContent = "Enviar";
   sendButton.disabled = !selectedFiles.length;
 });
@@ -366,3 +442,5 @@ sendButton.addEventListener("click", async () => {
   sendButton.textContent = "Enviar";
   sendButton.disabled = !selectedFiles.length;
 });
+
+renderPendingNotice();

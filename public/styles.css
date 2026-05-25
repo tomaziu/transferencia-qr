@@ -741,6 +741,27 @@ h3 {
   background: rgba(178, 58, 72, 0.09);
 }
 
+.resume-advice {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  border: 1px solid rgba(35, 100, 170, 0.36);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(35, 100, 170, 0.09);
+}
+
+.resume-advice strong {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.resume-advice p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .queue {
   display: grid;
   gap: 10px;
