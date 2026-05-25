@@ -1,3 +1,5 @@
+![Transferencia por QR Code](docs/assets/transferencia-qr-banner.png)
+
 # Transferencia por QR Code
 
 App local para receber arquivos do celular pela mesma rede Wi-Fi.
