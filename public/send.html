@@ -27,7 +27,10 @@
           <strong>Selecionar arquivos</strong>
         </label>
 
-        <button id="sendButton" type="button" class="primary-button" disabled>Enviar</button>
+        <div class="send-actions">
+          <button id="sendButton" type="button" class="primary-button" disabled>Enviar</button>
+          <button id="stopButton" type="button" class="secondary-button stop-button" hidden>Parar</button>
+        </div>
 
         <div class="queue-summary hidden" id="queueSummary" aria-live="polite">
           <span id="queueStep">0 de 0</span>

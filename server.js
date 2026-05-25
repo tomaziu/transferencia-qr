@@ -448,6 +448,29 @@ function uploadMetaPath(id) {
   return path.join(uploadDir, `.upload-${safeUploadId(id)}.json`);
 }
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function removeUploadFiles(id) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const results = await Promise.allSettled([
+      fsp.rm(partialUploadPath(id), { force: true }),
+      fsp.rm(uploadMetaPath(id), { force: true })
+    ]);
+    const failed = results.find((result) => result.status === "rejected");
+
+    if (!failed) return;
+
+    lastError = failed.reason;
+    await wait(120 * (attempt + 1));
+  }
+
+  throw lastError;
+}
+
 async function readUploadMeta(id) {
   const raw = await fsp.readFile(uploadMetaPath(id), "utf8");
   return JSON.parse(raw);
@@ -748,10 +771,7 @@ async function handleUploadCancel(req, res, url) {
     const body = req.method === "POST" ? await readJsonBody(req) : {};
     const id = safeUploadId(body.id || url.searchParams.get("id"));
 
-    await Promise.all([
-      fsp.rm(partialUploadPath(id), { force: true }),
-      fsp.rm(uploadMetaPath(id), { force: true })
-    ]);
+    await removeUploadFiles(id);
 
     activeTransfers.delete(id);
     broadcastState();

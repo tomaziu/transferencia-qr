@@ -1,5 +1,6 @@
 const fileInput = document.querySelector("#fileInput");
 const sendButton = document.querySelector("#sendButton");
+const stopButton = document.querySelector("#stopButton");
 const queue = document.querySelector("#queue");
 const queueSummary = document.querySelector("#queueSummary");
 const queueStep = document.querySelector("#queueStep");
@@ -23,6 +24,8 @@ let selectedFiles = [];
 let sending = false;
 let activeFileId = null;
 let activeFileIndex = -1;
+let activeChunkRequest = null;
+let stopRequested = false;
 
 function createId() {
   if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
@@ -77,6 +80,31 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function createStoppedError() {
+  const error = new Error("Envio parado");
+  error.stopped = true;
+  return error;
+}
+
+function renderUploadControls() {
+  if (sending) {
+    sendButton.disabled = true;
+    sendButton.textContent = stopRequested ? "Parando..." : "Enviando...";
+    stopButton.hidden = false;
+    stopButton.disabled = stopRequested;
+    stopButton.textContent = stopRequested ? "Parando..." : "Parar";
+    fileInput.disabled = true;
+    return;
+  }
+
+  sendButton.textContent = "Enviar";
+  sendButton.disabled = !selectedFiles.length;
+  stopButton.hidden = true;
+  stopButton.disabled = true;
+  stopButton.textContent = "Parar";
+  fileInput.disabled = false;
+}
+
 function getPendingUploads() {
   try {
     const items = JSON.parse(localStorage.getItem(PENDING_UPLOADS_KEY) || "[]");
@@ -105,7 +133,6 @@ function rememberPendingUpload(fileInfo, received = 0) {
     updatedAt: Date.now()
   });
   savePendingUploads(pending);
-  renderPendingNotice();
 }
 
 function forgetPendingUpload(id) {
@@ -121,6 +148,15 @@ function matchingPendingUpload(fileInfo) {
 }
 
 function renderPendingNotice() {
+  if (sending) {
+    resumeAdvice.className = "resume-advice hidden";
+    resumeAdviceTitle.textContent = "";
+    resumeAdviceText.textContent = "";
+    resumeAdvice.removeAttribute("data-pending-id");
+    discardResumeButton.disabled = true;
+    return;
+  }
+
   const pending = getPendingUploads();
 
   if (!pending.length) {
@@ -317,6 +353,16 @@ async function finishUpload(fileInfo) {
   return readJsonResponse(response);
 }
 
+async function cancelUploadOnServer(id) {
+  if (!id) return;
+
+  await fetch(`/upload/cancel?key=${encodeURIComponent(key)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id })
+  });
+}
+
 async function cancelSavedUpload(id) {
   if (!id) return;
 
@@ -324,11 +370,7 @@ async function cancelSavedUpload(id) {
   discardResumeButton.textContent = "Descartando...";
 
   try {
-    await fetch(`/upload/cancel?key=${encodeURIComponent(key)}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id })
-    });
+    await cancelUploadOnServer(id);
   } finally {
     forgetPendingUpload(id);
     selectedFiles = selectedFiles.map((file) => file.id === id ? { ...file, pending: null } : file);
@@ -336,6 +378,26 @@ async function cancelSavedUpload(id) {
     discardResumeButton.textContent = "Descartar salvo";
     discardResumeButton.disabled = false;
   }
+}
+
+async function cancelStoppedFile(fileInfo) {
+  if (!fileInfo) return;
+
+  try {
+    await delay(150);
+    await cancelUploadOnServer(fileInfo.id);
+  } catch {
+    // If the connection dropped, at least remove the local resume marker.
+  }
+
+  forgetPendingUpload(fileInfo.id);
+  fileInfo.pending = null;
+  updateItem(fileInfo.id, {
+    status: "Envio parado",
+    eta: "cancelado",
+    className: "error",
+    fileStatus: "error"
+  });
 }
 
 function updateProgress(fileInfo, received, startedAt, baseOffset) {
@@ -354,7 +416,19 @@ function updateProgress(fileInfo, received, startedAt, baseOffset) {
 
 function uploadChunk(fileInfo, offset, chunk, startedAt, baseOffset) {
   return new Promise((resolve, reject) => {
+    if (stopRequested) {
+      reject(createStoppedError());
+      return;
+    }
+
     const xhr = new XMLHttpRequest();
+    activeChunkRequest = xhr;
+
+    const clearActiveRequest = () => {
+      if (activeChunkRequest === xhr) {
+        activeChunkRequest = null;
+      }
+    };
 
     xhr.open(
       "POST",
@@ -368,6 +442,7 @@ function uploadChunk(fileInfo, offset, chunk, startedAt, baseOffset) {
     });
 
     xhr.addEventListener("load", () => {
+      clearActiveRequest();
       let data = {};
       try {
         data = JSON.parse(xhr.responseText || "{}");
@@ -390,8 +465,14 @@ function uploadChunk(fileInfo, offset, chunk, startedAt, baseOffset) {
       reject(error);
     });
 
-    xhr.addEventListener("error", () => reject(new Error("Erro de rede")));
-    xhr.addEventListener("abort", () => reject(new Error("Envio pausado")));
+    xhr.addEventListener("error", () => {
+      clearActiveRequest();
+      reject(new Error("Erro de rede"));
+    });
+    xhr.addEventListener("abort", () => {
+      clearActiveRequest();
+      reject(stopRequested ? createStoppedError() : new Error("Envio pausado"));
+    });
     xhr.send(chunk);
   });
 }
@@ -405,6 +486,8 @@ async function uploadFile(fileInfo) {
   updateItem(fileInfo.id, { resetClass: true, fileStatus: "current", status: "Preparando", eta: "--" });
 
   const start = await startUpload(fileInfo);
+  if (stopRequested) throw createStoppedError();
+
   const chunkSize = Math.max(256 * 1024, Number(start.chunkSize || DEFAULT_CHUNK_SIZE));
 
   if (start.complete) {
@@ -433,6 +516,8 @@ async function uploadFile(fileInfo) {
   rememberPendingUpload(fileInfo, offset);
 
   while (offset < fileInfo.size) {
+    if (stopRequested) throw createStoppedError();
+
     const end = Math.min(offset + chunkSize, fileInfo.size);
     const chunk = fileInfo.file.slice(offset, end);
     let attempts = 0;
@@ -445,6 +530,10 @@ async function uploadFile(fileInfo) {
         updateProgress(fileInfo, offset, startedAt, baseOffset);
         break;
       } catch (error) {
+        if (error.stopped || stopRequested) {
+          throw createStoppedError();
+        }
+
         attempts += 1;
 
         try {
@@ -476,6 +565,8 @@ async function uploadFile(fileInfo) {
     }
   }
 
+  if (stopRequested) throw createStoppedError();
+
   await finishUpload(fileInfo);
   forgetPendingUpload(fileInfo.id);
   updateItem(fileInfo.id, {
@@ -488,7 +579,8 @@ async function uploadFile(fileInfo) {
 }
 
 fileInput.addEventListener("change", async () => {
-  sending = false;
+  if (sending) return;
+
   sendButton.disabled = true;
   sendButton.textContent = "Preparando...";
 
@@ -510,32 +602,51 @@ fileInput.addEventListener("change", async () => {
   renderQueue();
   renderSizeAdvice();
   renderPendingNotice();
-  sendButton.textContent = "Enviar";
-  sendButton.disabled = !selectedFiles.length;
+  renderUploadControls();
 });
 
 sendButton.addEventListener("click", async () => {
   if (sending || !selectedFiles.length) return;
 
   sending = true;
-  sendButton.disabled = true;
-  sendButton.textContent = "Enviando...";
+  stopRequested = false;
+  activeChunkRequest = null;
+  renderUploadControls();
+  renderPendingNotice();
 
   for (const fileInfo of selectedFiles) {
+    if (stopRequested) break;
+
     try {
       await uploadFile(fileInfo);
-    } catch {
+    } catch (error) {
+      if (error.stopped || stopRequested) {
+        await cancelStoppedFile(fileInfo);
+      }
       break;
     }
   }
 
   sending = false;
+  stopRequested = false;
+  activeChunkRequest = null;
   activeFileId = null;
   activeFileIndex = -1;
   markQueueState();
   updateQueueSummary();
-  sendButton.textContent = "Enviar";
-  sendButton.disabled = !selectedFiles.length;
+  renderUploadControls();
+  renderPendingNotice();
+});
+
+stopButton.addEventListener("click", () => {
+  if (!sending || stopRequested) return;
+
+  stopRequested = true;
+  renderUploadControls();
+
+  if (activeChunkRequest) {
+    activeChunkRequest.abort();
+  }
 });
 
 discardResumeButton.addEventListener("click", () => {
@@ -543,4 +654,5 @@ discardResumeButton.addEventListener("click", () => {
 });
 
 renderPendingNotice();
+renderUploadControls();
 updateQueueSummary();

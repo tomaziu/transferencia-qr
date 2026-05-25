@@ -699,6 +699,17 @@ h3 {
   color: var(--teal-dark);
 }
 
+.send-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.send-actions .primary-button,
+.send-actions .secondary-button {
+  margin-top: 0;
+}
+
 .primary-button {
   width: 100%;
   min-height: 52px;
@@ -716,6 +727,11 @@ h3 {
   background: #fff;
   color: var(--blue);
   font-weight: 800;
+}
+
+.stop-button {
+  border-color: rgba(178, 58, 72, 0.35);
+  color: var(--danger);
 }
 
 .send-panel .primary-button:disabled {
