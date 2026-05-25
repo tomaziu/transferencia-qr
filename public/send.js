@@ -1,6 +1,10 @@
 const fileInput = document.querySelector("#fileInput");
 const sendButton = document.querySelector("#sendButton");
 const queue = document.querySelector("#queue");
+const queueSummary = document.querySelector("#queueSummary");
+const queueStep = document.querySelector("#queueStep");
+const queueCurrent = document.querySelector("#queueCurrent");
+const queueNext = document.querySelector("#queueNext");
 const sizeAdvice = document.querySelector("#sizeAdvice");
 const sizeAdviceTitle = document.querySelector("#sizeAdviceTitle");
 const sizeAdviceText = document.querySelector("#sizeAdviceText");
@@ -16,6 +20,8 @@ const PENDING_UPLOADS_KEY = "transferenciaQrPendingUploads";
 
 let selectedFiles = [];
 let sending = false;
+let activeFileId = null;
+let activeFileIndex = -1;
 
 function createId() {
   if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
@@ -175,12 +181,47 @@ function renderSizeAdvice() {
   sizeAdviceText.textContent = text;
 }
 
+function updateQueueSummary() {
+  if (!selectedFiles.length) {
+    queueSummary.className = "queue-summary hidden";
+    queueStep.textContent = "0 de 0";
+    queueCurrent.textContent = "Nenhum arquivo selecionado";
+    queueNext.textContent = "";
+    return;
+  }
+
+  const completed = selectedFiles.filter((file) => file.status === "done").length;
+  const currentIndex = activeFileIndex >= 0 ? activeFileIndex : Math.min(completed, selectedFiles.length - 1);
+  const current = selectedFiles[currentIndex];
+  const next = selectedFiles.slice(currentIndex + 1).find((file) => file.status !== "done");
+  const verb = sending ? "Enviando" : completed === selectedFiles.length ? "Concluido" : "Pronto";
+
+  queueSummary.className = "queue-summary";
+  queueStep.textContent = `${verb} ${Math.min(currentIndex + 1, selectedFiles.length)} de ${selectedFiles.length}`;
+  queueCurrent.textContent = current ? current.name : "Fila pronta";
+  queueNext.textContent = next ? `Proximo: ${next.name}` : completed === selectedFiles.length ? "Todos os arquivos foram enviados." : "Ultimo arquivo da fila.";
+}
+
+function markQueueState() {
+  const nextFile = selectedFiles.find((file) => file.status !== "done" && file.id !== activeFileId);
+
+  for (const file of selectedFiles) {
+    const item = Array.from(queue.children).find((child) => child.dataset.fileId === file.id);
+    if (!item) continue;
+
+    item.classList.toggle("current", file.id === activeFileId);
+    item.classList.toggle("next", Boolean(nextFile && file.id === nextFile.id && file.id !== activeFileId));
+    item.classList.toggle("done", file.status === "done");
+    item.classList.toggle("error", file.status === "error");
+  }
+}
+
 function renderQueue() {
   queue.innerHTML = "";
 
   for (const file of selectedFiles) {
     const item = document.createElement("article");
-    item.className = "queue-item";
+    item.className = `queue-item ${file.status || "queued"}`;
     item.dataset.fileId = file.id;
     item.innerHTML = `
       <header>
@@ -189,7 +230,7 @@ function renderQueue() {
       </header>
       <div class="queue-progress"><span></span></div>
       <div class="queue-meta">
-        <span class="queue-status">Na fila</span>
+        <span class="queue-status">${file.status === "done" ? "Enviado" : file.status === "error" ? "Pausado" : "Na fila"}</span>
         <span class="queue-eta">--</span>
       </div>
     `;
@@ -203,17 +244,27 @@ function renderQueue() {
       });
     }
   }
+
+  markQueueState();
+  updateQueueSummary();
 }
 
 function updateItem(id, patch) {
   const item = Array.from(queue.children).find((child) => child.dataset.fileId === id);
   if (!item) return;
 
-  if (patch.resetClass) item.classList.remove("done", "error");
+  const fileInfo = selectedFiles.find((file) => file.id === id);
+  if (fileInfo && patch.fileStatus) fileInfo.status = patch.fileStatus;
+  if (patch.resetClass) {
+    item.classList.remove("done", "error", "current", "next");
+    if (fileInfo) fileInfo.status = "queued";
+  }
   if (patch.className) item.classList.add(patch.className);
   if (patch.percent != null) item.querySelector(".queue-progress span").style.width = `${patch.percent}%`;
   if (patch.status) item.querySelector(".queue-status").textContent = patch.status;
   if (patch.eta) item.querySelector(".queue-eta").textContent = patch.eta;
+  markQueueState();
+  updateQueueSummary();
 }
 
 async function readJsonResponse(response) {
@@ -315,7 +366,12 @@ function uploadChunk(fileInfo, offset, chunk, startedAt, baseOffset) {
 }
 
 async function uploadFile(fileInfo) {
-  updateItem(fileInfo.id, { resetClass: true, status: "Preparando", eta: "--" });
+  activeFileId = fileInfo.id;
+  activeFileIndex = selectedFiles.findIndex((file) => file.id === fileInfo.id);
+  fileInfo.status = "current";
+  markQueueState();
+  updateQueueSummary();
+  updateItem(fileInfo.id, { resetClass: true, fileStatus: "current", status: "Preparando", eta: "--" });
 
   const start = await startUpload(fileInfo);
   const chunkSize = Math.max(256 * 1024, Number(start.chunkSize || DEFAULT_CHUNK_SIZE));
@@ -325,7 +381,8 @@ async function uploadFile(fileInfo) {
       percent: 100,
       status: "Ja enviado",
       eta: "concluido",
-      className: "done"
+      className: "done",
+      fileStatus: "done"
     });
     return;
   }
@@ -373,7 +430,8 @@ async function uploadFile(fileInfo) {
           updateItem(fileInfo.id, {
             status: "Pausado - toque Enviar para continuar",
             eta: error.message || "sem conexao",
-            className: "error"
+            className: "error",
+            fileStatus: "error"
           });
           throw error;
         }
@@ -393,7 +451,8 @@ async function uploadFile(fileInfo) {
     percent: 100,
     status: "Enviado",
     eta: "concluido",
-    className: "done"
+    className: "done",
+    fileStatus: "done"
   });
 }
 
@@ -408,7 +467,8 @@ fileInput.addEventListener("change", async () => {
       file,
       name: file.name,
       size: file.size,
-      pending: null
+      pending: null,
+      status: "queued"
     }))
   );
   selectedFiles = selectedFiles.map((fileInfo) => ({
@@ -439,8 +499,13 @@ sendButton.addEventListener("click", async () => {
   }
 
   sending = false;
+  activeFileId = null;
+  activeFileIndex = -1;
+  markQueueState();
+  updateQueueSummary();
   sendButton.textContent = "Enviar";
   sendButton.disabled = !selectedFiles.length;
 });
 
 renderPendingNotice();
+updateQueueSummary();

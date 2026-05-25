@@ -29,6 +29,12 @@
 
         <button id="sendButton" type="button" class="primary-button" disabled>Enviar</button>
 
+        <div class="queue-summary hidden" id="queueSummary" aria-live="polite">
+          <span id="queueStep">0 de 0</span>
+          <strong id="queueCurrent">Nenhum arquivo selecionado</strong>
+          <p id="queueNext"></p>
+        </div>
+
         <div class="size-advice hidden" id="sizeAdvice" aria-live="polite">
           <strong id="sizeAdviceTitle"></strong>
           <p id="sizeAdviceText"></p>
