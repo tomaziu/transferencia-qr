@@ -11,6 +11,7 @@ const sizeAdviceText = document.querySelector("#sizeAdviceText");
 const resumeAdvice = document.querySelector("#resumeAdvice");
 const resumeAdviceTitle = document.querySelector("#resumeAdviceTitle");
 const resumeAdviceText = document.querySelector("#resumeAdviceText");
+const discardResumeButton = document.querySelector("#discardResumeButton");
 const key = new URLSearchParams(window.location.search).get("key") || "";
 
 const DEFAULT_CHUNK_SIZE = 1024 * 1024;
@@ -86,7 +87,11 @@ function getPendingUploads() {
 }
 
 function savePendingUploads(items) {
-  localStorage.setItem(PENDING_UPLOADS_KEY, JSON.stringify(items.slice(0, 12)));
+  try {
+    localStorage.setItem(PENDING_UPLOADS_KEY, JSON.stringify(items.slice(0, 12)));
+  } catch {
+    // Some browsers may block localStorage; resume hints are optional.
+  }
 }
 
 function rememberPendingUpload(fileInfo, received = 0) {
@@ -100,6 +105,7 @@ function rememberPendingUpload(fileInfo, received = 0) {
     updatedAt: Date.now()
   });
   savePendingUploads(pending);
+  renderPendingNotice();
 }
 
 function forgetPendingUpload(id) {
@@ -121,13 +127,17 @@ function renderPendingNotice() {
     resumeAdvice.className = "resume-advice hidden";
     resumeAdviceTitle.textContent = "";
     resumeAdviceText.textContent = "";
+    resumeAdvice.removeAttribute("data-pending-id");
+    discardResumeButton.disabled = true;
     return;
   }
 
   const [latest] = pending;
   resumeAdvice.className = "resume-advice";
+  resumeAdvice.dataset.pendingId = latest.id;
   resumeAdviceTitle.textContent = `Envio pausado: ${latest.name}`;
   resumeAdviceText.textContent = `Selecione o mesmo arquivo (${formatBytes(latest.size)}) e toque em Enviar para continuar do ponto salvo.`;
+  discardResumeButton.disabled = false;
 }
 
 function isHostedSite() {
@@ -305,6 +315,27 @@ async function finishUpload(fileInfo) {
   });
 
   return readJsonResponse(response);
+}
+
+async function cancelSavedUpload(id) {
+  if (!id) return;
+
+  discardResumeButton.disabled = true;
+  discardResumeButton.textContent = "Descartando...";
+
+  try {
+    await fetch(`/upload/cancel?key=${encodeURIComponent(key)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id })
+    });
+  } finally {
+    forgetPendingUpload(id);
+    selectedFiles = selectedFiles.map((file) => file.id === id ? { ...file, pending: null } : file);
+    renderQueue();
+    discardResumeButton.textContent = "Descartar salvo";
+    discardResumeButton.disabled = false;
+  }
 }
 
 function updateProgress(fileInfo, received, startedAt, baseOffset) {
@@ -505,6 +536,10 @@ sendButton.addEventListener("click", async () => {
   updateQueueSummary();
   sendButton.textContent = "Enviar";
   sendButton.disabled = !selectedFiles.length;
+});
+
+discardResumeButton.addEventListener("click", () => {
+  cancelSavedUpload(resumeAdvice.dataset.pendingId);
 });
 
 renderPendingNotice();

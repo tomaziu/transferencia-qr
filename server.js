@@ -731,6 +731,44 @@ async function handleUploadStatus(req, res, url) {
   }
 }
 
+async function handleUploadCancel(req, res, url) {
+  if (!validateKey(url)) {
+    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
+    req.resume();
+    return;
+  }
+
+  if (req.method !== "POST" && req.method !== "DELETE") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    req.resume();
+    return;
+  }
+
+  try {
+    const body = req.method === "POST" ? await readJsonBody(req) : {};
+    const id = safeUploadId(body.id || url.searchParams.get("id"));
+
+    await Promise.all([
+      fsp.rm(partialUploadPath(id), { force: true }),
+      fsp.rm(uploadMetaPath(id), { force: true })
+    ]);
+
+    activeTransfers.delete(id);
+    broadcastState();
+
+    writeJson(res, 200, {
+      ok: true,
+      id,
+      cancelled: true
+    });
+  } catch (error) {
+    writeJson(res, 400, {
+      ok: false,
+      error: error.message || "Nao foi possivel descartar o envio"
+    });
+  }
+}
+
 async function handleUploadChunk(req, res, url) {
   if (!validateKey(url)) {
     writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
@@ -1023,6 +1061,11 @@ async function route(req, res) {
 
   if (url.pathname === "/upload/status") {
     await handleUploadStatus(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/upload/cancel") {
+    await handleUploadCancel(req, res, url);
     return;
   }
 
