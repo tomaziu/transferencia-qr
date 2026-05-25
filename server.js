@@ -234,10 +234,12 @@ function writeJson(res, status, payload) {
 }
 
 function isLocalRequest(req) {
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
   const remoteAddress = req.socket.remoteAddress || "";
   const normalized = remoteAddress.replace(/^::ffff:/, "");
 
-  return normalized === "127.0.0.1" || remoteAddress === "::1" || remoteAddress === "localhost";
+  const localAddress = normalized === "127.0.0.1" || remoteAddress === "::1" || remoteAddress === "localhost";
+  return localAddress && isLoopbackHost(host);
 }
 
 function requireLocalRequest(req, res) {
