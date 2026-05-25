@@ -650,6 +650,37 @@ h3 {
   background: #9fb5af;
 }
 
+.size-advice {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  border: 1px solid rgba(15, 143, 134, 0.28);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(15, 143, 134, 0.08);
+}
+
+.size-advice strong {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.size-advice p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.size-advice.caution {
+  border-color: rgba(194, 122, 18, 0.38);
+  background: rgba(194, 122, 18, 0.1);
+}
+
+.size-advice.danger {
+  border-color: rgba(178, 58, 72, 0.42);
+  background: rgba(178, 58, 72, 0.09);
+}
+
 .queue {
   display: grid;
   gap: 10px;

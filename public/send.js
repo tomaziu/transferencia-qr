@@ -1,10 +1,14 @@
 const fileInput = document.querySelector("#fileInput");
 const sendButton = document.querySelector("#sendButton");
 const queue = document.querySelector("#queue");
+const sizeAdvice = document.querySelector("#sizeAdvice");
+const sizeAdviceTitle = document.querySelector("#sizeAdviceTitle");
+const sizeAdviceText = document.querySelector("#sizeAdviceText");
 const key = new URLSearchParams(window.location.search).get("key") || "";
 
 const DEFAULT_CHUNK_SIZE = 1024 * 1024;
 const MAX_CHUNK_RETRIES = 3;
+const ONE_GB = 1024 * 1024 * 1024;
 
 let selectedFiles = [];
 let sending = false;
@@ -60,6 +64,57 @@ function escapeHtml(value) {
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isHostedSite() {
+  const host = window.location.hostname;
+  const isLan =
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host.startsWith("10.") ||
+    host.startsWith("192.168.") ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host);
+
+  return !isLan;
+}
+
+function renderSizeAdvice() {
+  const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+
+  if (!totalSize) {
+    sizeAdvice.className = "size-advice hidden";
+    sizeAdviceTitle.textContent = "";
+    sizeAdviceText.textContent = "";
+    return;
+  }
+
+  const hosted = isHostedSite();
+  let level = "ok";
+  let text = "Tamanho tranquilo. Mantenha esta tela aberta ate concluir.";
+
+  if (totalSize >= 10 * ONE_GB) {
+    level = "danger";
+    text = hosted
+      ? "10 GB ou mais e pesado para o Render gratis. Use a versao local no PC para evitar perda do envio se o servidor reiniciar."
+      : "10 GB ou mais pode funcionar localmente, mas depende do Wi-Fi e do espaco livre no PC.";
+  } else if (totalSize >= 5 * ONE_GB) {
+    level = "danger";
+    text = hosted
+      ? "Arquivo muito grande para hospedagem gratis. Pode demorar bastante e o parcial pode sumir se o servidor reiniciar."
+      : "Arquivo muito grande. Confira o espaco livre no PC e use uma rede Wi-Fi estavel.";
+  } else if (totalSize >= ONE_GB) {
+    level = "caution";
+    text = hosted
+      ? "Arquivo grande. No Render gratis, envie em Wi-Fi estavel e baixe assim que terminar."
+      : "Arquivo grande. Use Wi-Fi estavel e confira o espaco livre no destino.";
+  } else if (totalSize >= 500 * 1024 * 1024) {
+    level = "caution";
+    text = "Arquivo medio. Evite trocar de rede ou bloquear a tela durante o envio.";
+  }
+
+  sizeAdvice.className = `size-advice ${level}`;
+  sizeAdviceTitle.textContent = `Total selecionado: ${formatBytes(totalSize)}`;
+  sizeAdviceText.textContent = text;
 }
 
 function renderQueue() {
@@ -287,6 +342,7 @@ fileInput.addEventListener("change", async () => {
   );
 
   renderQueue();
+  renderSizeAdvice();
   sendButton.textContent = "Enviar";
   sendButton.disabled = !selectedFiles.length;
 });
