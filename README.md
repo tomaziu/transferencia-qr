@@ -2,6 +2,12 @@
 
 App local para receber arquivos do celular pela mesma rede Wi-Fi.
 
+## Site hospedado
+
+Acesse a versao online em:
+
+https://transferencia-qr.onrender.com/
+
 ## Como usar
 
 1. Instale as dependencias:
