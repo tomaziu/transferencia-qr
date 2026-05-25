@@ -138,11 +138,13 @@ h3 {
   grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
   gap: 22px;
   align-items: start;
+  min-width: 0;
 }
 
 .qr-panel,
 .transfer-panel,
 .send-panel {
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.9);
@@ -516,6 +518,8 @@ h3 {
 .queue-item {
   display: grid;
   gap: 10px;
+  min-width: 0;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
@@ -534,18 +538,33 @@ h3 {
 .queue-item strong {
   min-width: 0;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
-.history-item span,
 .queue-item span {
   color: var(--muted);
   white-space: nowrap;
 }
 
+.history-item span {
+  color: var(--muted);
+}
+
 .history-actions {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 10px;
+}
+
+.history-actions span {
+  white-space: nowrap;
+}
+
+.history-meta {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .download-button {

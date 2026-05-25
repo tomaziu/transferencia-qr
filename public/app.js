@@ -83,7 +83,7 @@ function renderProgress(transfer) {
   progressFill.style.width = `${percent}%`;
   receivedMetric.textContent = `${formatBytes(transfer.received)} / ${formatBytes(transfer.size)}`;
   speedMetric.textContent = `${formatBytes(transfer.speed)}/s`;
-  etaMetric.textContent = transfer.status === "complete" ? "concluido" : formatTime(transfer.eta);
+  etaMetric.textContent = transfer.status === "paused" ? "pausado" : transfer.status === "complete" ? "concluido" : formatTime(transfer.eta);
   emptyState.classList.add("hidden");
 }
 
@@ -118,7 +118,7 @@ function renderHistory(items) {
           ` : ""}
         </div>
       </header>
-      <span>${escapeHtml(item.path)} · ${formatTime(item.duration)}</span>
+      <span class="history-meta">${escapeHtml(item.location || "Disponivel para download")} · ${formatTime(item.duration)}</span>
     `;
     historyList.append(row);
   }

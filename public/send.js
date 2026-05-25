@@ -3,6 +3,9 @@ const sendButton = document.querySelector("#sendButton");
 const queue = document.querySelector("#queue");
 const key = new URLSearchParams(window.location.search).get("key") || "";
 
+const DEFAULT_CHUNK_SIZE = 1024 * 1024;
+const MAX_CHUNK_RETRIES = 3;
+
 let selectedFiles = [];
 let sending = false;
 
@@ -12,6 +15,18 @@ function createId() {
   }
 
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function createFileId(file) {
+  const source = `${file.name}|${file.size}|${file.lastModified}`;
+
+  if (globalThis.crypto?.subtle && globalThis.TextEncoder) {
+    const bytes = new TextEncoder().encode(source);
+    const hash = await crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+
+  return createId();
 }
 
 function formatBytes(bytes) {
@@ -43,6 +58,10 @@ function escapeHtml(value) {
   }[char]));
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function renderQueue() {
   queue.innerHTML = "";
 
@@ -69,80 +88,207 @@ function updateItem(id, patch) {
   const item = Array.from(queue.children).find((child) => child.dataset.fileId === id);
   if (!item) return;
 
+  if (patch.resetClass) item.classList.remove("done", "error");
   if (patch.className) item.classList.add(patch.className);
   if (patch.percent != null) item.querySelector(".queue-progress span").style.width = `${patch.percent}%`;
   if (patch.status) item.querySelector(".queue-status").textContent = patch.status;
   if (patch.eta) item.querySelector(".queue-eta").textContent = patch.eta;
 }
 
-function uploadFile(fileInfo) {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    const startedAt = Date.now();
+async function readJsonResponse(response) {
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok === false) {
+    const error = new Error(data.error || "Falha no envio");
+    error.received = data.received;
+    throw error;
+  }
 
-    xhr.open("POST", `/upload?key=${encodeURIComponent(key)}&id=${encodeURIComponent(fileInfo.id)}`);
-    xhr.setRequestHeader("x-file-name", encodeURIComponent(fileInfo.name));
-    xhr.setRequestHeader("content-type", fileInfo.file.type || "application/octet-stream");
+  return data;
+}
 
-    xhr.upload.addEventListener("progress", (event) => {
-      if (!event.lengthComputable) return;
+async function startUpload(fileInfo) {
+  const response = await fetch(`/upload/start?key=${encodeURIComponent(key)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      id: fileInfo.id,
+      fileName: fileInfo.name,
+      size: fileInfo.size
+    })
+  });
 
-      const percent = Math.min(100, (event.loaded / event.total) * 100);
-      const elapsed = Math.max(0.001, (Date.now() - startedAt) / 1000);
-      const speed = event.loaded / elapsed;
-      const remaining = Math.max(0, event.total - event.loaded);
-      const eta = remaining > 0 && speed > 0 ? remaining / speed : 0;
+  return readJsonResponse(response);
+}
 
-      updateItem(fileInfo.id, {
-        percent,
-        status: `${Math.round(percent)}% · ${formatBytes(speed)}/s`,
-        eta: formatTime(eta)
-      });
-    });
+async function requestStatus(fileInfo) {
+  const response = await fetch(`/upload/status?key=${encodeURIComponent(key)}&id=${encodeURIComponent(fileInfo.id)}`);
+  return readJsonResponse(response);
+}
 
-    xhr.addEventListener("load", () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        updateItem(fileInfo.id, {
-          percent: 100,
-          status: "Enviado",
-          eta: "concluido",
-          className: "done"
-        });
-        resolve();
-        return;
-      }
+async function finishUpload(fileInfo) {
+  const response = await fetch(`/upload/finish?key=${encodeURIComponent(key)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: fileInfo.id })
+  });
 
-      updateItem(fileInfo.id, {
-        status: "Falhou",
-        eta: xhr.responseText || "erro",
-        className: "error"
-      });
-      reject(new Error(xhr.responseText || "Falha no envio"));
-    });
+  return readJsonResponse(response);
+}
 
-    xhr.addEventListener("error", () => {
-      updateItem(fileInfo.id, {
-        status: "Falhou",
-        eta: "sem conexao",
-        className: "error"
-      });
-      reject(new Error("Erro de rede"));
-    });
+function updateProgress(fileInfo, received, startedAt, baseOffset) {
+  const percent = fileInfo.size > 0 ? Math.min(100, (received / fileInfo.size) * 100) : 100;
+  const elapsed = Math.max(0.001, (Date.now() - startedAt) / 1000);
+  const speed = Math.max(0, received - baseOffset) / elapsed;
+  const remaining = Math.max(0, fileInfo.size - received);
+  const eta = remaining > 0 && speed > 0 ? remaining / speed : 0;
 
-    updateItem(fileInfo.id, { status: "Enviando", eta: "--" });
-    xhr.send(fileInfo.file);
+  updateItem(fileInfo.id, {
+    percent,
+    status: `${Math.round(percent)}% · ${formatBytes(speed)}/s`,
+    eta: formatTime(eta)
   });
 }
 
-fileInput.addEventListener("change", () => {
-  selectedFiles = Array.from(fileInput.files || []).map((file) => ({
-    id: createId(),
-    file,
-    name: file.name,
-    size: file.size
-  }));
-  sendButton.disabled = !selectedFiles.length || sending;
+function uploadChunk(fileInfo, offset, chunk, startedAt, baseOffset) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.open(
+      "POST",
+      `/upload/chunk?key=${encodeURIComponent(key)}&id=${encodeURIComponent(fileInfo.id)}&offset=${encodeURIComponent(offset)}`
+    );
+    xhr.setRequestHeader("content-type", "application/octet-stream");
+
+    xhr.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) return;
+      updateProgress(fileInfo, offset + event.loaded, startedAt, baseOffset);
+    });
+
+    xhr.addEventListener("load", () => {
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText || "{}");
+      } catch {
+        data = { error: xhr.responseText || "Falha no envio" };
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+        return;
+      }
+
+      if (xhr.status === 409 && typeof data.received === "number") {
+        resolve(data);
+        return;
+      }
+
+      const error = new Error(data.error || "Falha no envio");
+      error.received = data.received;
+      reject(error);
+    });
+
+    xhr.addEventListener("error", () => reject(new Error("Erro de rede")));
+    xhr.addEventListener("abort", () => reject(new Error("Envio pausado")));
+    xhr.send(chunk);
+  });
+}
+
+async function uploadFile(fileInfo) {
+  updateItem(fileInfo.id, { resetClass: true, status: "Preparando", eta: "--" });
+
+  const start = await startUpload(fileInfo);
+  const chunkSize = Math.max(256 * 1024, Number(start.chunkSize || DEFAULT_CHUNK_SIZE));
+
+  if (start.complete) {
+    updateItem(fileInfo.id, {
+      percent: 100,
+      status: "Ja enviado",
+      eta: "concluido",
+      className: "done"
+    });
+    return;
+  }
+
+  let offset = Math.min(Number(start.received || 0), fileInfo.size);
+  const startedAt = Date.now();
+  const baseOffset = offset;
+
+  if (offset > 0) {
+    updateItem(fileInfo.id, {
+      percent: (offset / fileInfo.size) * 100,
+      status: `Retomando de ${formatBytes(offset)}`,
+      eta: "--"
+    });
+  }
+
+  while (offset < fileInfo.size) {
+    const end = Math.min(offset + chunkSize, fileInfo.size);
+    const chunk = fileInfo.file.slice(offset, end);
+    let attempts = 0;
+
+    while (true) {
+      try {
+        const result = await uploadChunk(fileInfo, offset, chunk, startedAt, baseOffset);
+        offset = Math.min(Number(result.received || end), fileInfo.size);
+        updateProgress(fileInfo, offset, startedAt, baseOffset);
+        break;
+      } catch (error) {
+        attempts += 1;
+
+        try {
+          const status = await requestStatus(fileInfo);
+          if (typeof status.received === "number" && status.received > offset) {
+            offset = Math.min(status.received, fileInfo.size);
+            break;
+          }
+        } catch {
+          // The next retry will decide whether the connection recovered.
+        }
+
+        if (attempts >= MAX_CHUNK_RETRIES) {
+          updateItem(fileInfo.id, {
+            status: "Pausado - toque Enviar para continuar",
+            eta: error.message || "sem conexao",
+            className: "error"
+          });
+          throw error;
+        }
+
+        updateItem(fileInfo.id, {
+          status: `Reconectando (${attempts}/${MAX_CHUNK_RETRIES})`,
+          eta: "--"
+        });
+        await delay(900 * attempts);
+      }
+    }
+  }
+
+  await finishUpload(fileInfo);
+  updateItem(fileInfo.id, {
+    percent: 100,
+    status: "Enviado",
+    eta: "concluido",
+    className: "done"
+  });
+}
+
+fileInput.addEventListener("change", async () => {
+  sending = false;
+  sendButton.disabled = true;
+  sendButton.textContent = "Preparando...";
+
+  selectedFiles = await Promise.all(
+    Array.from(fileInput.files || []).map(async (file) => ({
+      id: await createFileId(file),
+      file,
+      name: file.name,
+      size: file.size
+    }))
+  );
+
   renderQueue();
+  sendButton.textContent = "Enviar";
+  sendButton.disabled = !selectedFiles.length;
 });
 
 sendButton.addEventListener("click", async () => {

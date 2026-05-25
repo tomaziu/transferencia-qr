@@ -13,6 +13,7 @@ const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
 const DEFAULT_UPLOAD_DIR = path.join(ROOT, "recebidos");
 const SETTINGS_FILE = path.join(ROOT, "transferencia-config.json");
+const CHUNK_SIZE = 1024 * 1024;
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -134,7 +135,9 @@ async function loadSettings() {
     const settings = JSON.parse(raw);
 
     if (typeof settings.destinationDir === "string" && settings.destinationDir.trim()) {
-      uploadDir = path.resolve(settings.destinationDir);
+      const destinationDir = settings.destinationDir.trim();
+      const isWindowsPathOnLinux = process.platform !== "win32" && /^[a-z]:[\\/]/i.test(destinationDir);
+      uploadDir = isWindowsPathOnLinux ? DEFAULT_UPLOAD_DIR : path.resolve(destinationDir);
     }
   } catch (error) {
     if (error.code !== "ENOENT") {
@@ -174,7 +177,7 @@ async function uniqueUploadPath(fileName) {
     try {
       await fsp.access(candidate);
       const nextName = `${parsed.name} (${counter})${parsed.ext}`;
-      candidate = path.join(UPLOAD_DIR, nextName);
+      candidate = path.join(uploadDir, nextName);
       counter += 1;
     } catch {
       return candidate;
@@ -212,7 +215,7 @@ function publicHistoryItem(item) {
     size: item.size,
     duration: item.duration,
     completedAt: item.completedAt,
-    path: item.path,
+    location: item.location,
     downloadUrl: item.downloadUrl
   };
 }
@@ -418,6 +421,67 @@ function contentDisposition(fileName) {
   return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 }
 
+function isHostedEnvironment() {
+  return Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_EXTERNAL_URL);
+}
+
+function uploadLocationLabel(targetPath) {
+  if (isHostedEnvironment()) {
+    return "Servidor temporario - use o botao de download";
+  }
+
+  return targetPath;
+}
+
+function safeUploadId(value) {
+  const id = String(value || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 96);
+  return id || crypto.randomUUID();
+}
+
+function partialUploadPath(id) {
+  return path.join(uploadDir, `.upload-${safeUploadId(id)}.part`);
+}
+
+function uploadMetaPath(id) {
+  return path.join(uploadDir, `.upload-${safeUploadId(id)}.json`);
+}
+
+async function readUploadMeta(id) {
+  const raw = await fsp.readFile(uploadMetaPath(id), "utf8");
+  return JSON.parse(raw);
+}
+
+async function writeUploadMeta(meta) {
+  await fsp.writeFile(uploadMetaPath(meta.id), JSON.stringify(meta, null, 2));
+}
+
+function rememberCompletedUpload({ id, fileName, savedName, targetPath, size, duration, completedAt }) {
+  const downloadToken = crypto.randomBytes(16).toString("hex");
+  const downloadUrl = `/download?id=${encodeURIComponent(id)}&token=${downloadToken}`;
+
+  completedFiles.set(id, {
+    fileName,
+    savedName,
+    targetPath,
+    size,
+    downloadToken
+  });
+
+  history.unshift({
+    id,
+    fileName,
+    savedName,
+    size,
+    duration,
+    completedAt,
+    location: uploadLocationLabel(targetPath),
+    downloadUrl
+  });
+  history.splice(12);
+
+  return downloadUrl;
+}
+
 async function serveStatic(res, filePath) {
   const normalized = path.normalize(filePath);
   const relative = path.relative(PUBLIC_DIR, normalized);
@@ -462,7 +526,7 @@ async function handleUpload(req, res, url) {
     return;
   }
 
-  const id = url.searchParams.get("id") || crypto.randomUUID();
+  const id = safeUploadId(url.searchParams.get("id") || crypto.randomUUID());
   const fileName = sanitizeFileName(req.headers["x-file-name"]);
   const size = Number(req.headers["content-length"] || 0);
   const targetPath = await uniqueUploadPath(fileName);
@@ -521,34 +585,23 @@ async function handleUpload(req, res, url) {
     transfer.received = size || transfer.received;
     const completedAt = Date.now();
     const duration = Math.max(0.001, (completedAt - transfer.startedAt) / 1000);
-    const downloadToken = crypto.randomBytes(16).toString("hex");
-    const downloadUrl = `/download?id=${encodeURIComponent(id)}&token=${downloadToken}`;
-
-    completedFiles.set(id, {
-      fileName,
-      savedName,
-      targetPath,
-      downloadToken
-    });
-
-    history.unshift({
+    const downloadUrl = rememberCompletedUpload({
       id,
       fileName,
       savedName,
       size: transfer.received,
       duration,
       completedAt,
-      path: targetPath,
-      downloadUrl
+      targetPath
     });
-    history.splice(12);
 
     writeJson(res, 200, {
       ok: true,
       fileName,
       savedName,
       size: transfer.received,
-      duration
+      duration,
+      downloadUrl
     });
     broadcastState();
 
@@ -559,6 +612,312 @@ async function handleUpload(req, res, url) {
   });
 
   req.pipe(output);
+}
+
+async function handleUploadStart(req, res, url) {
+  if (!validateKey(url)) {
+    writeJson(res, 403, { ok: false, error: "Chave invalida" });
+    req.resume();
+    return;
+  }
+
+  if (req.method !== "POST") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    req.resume();
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(req);
+    const id = safeUploadId(body.id);
+    const fileName = sanitizeFileName(body.fileName);
+    const size = Math.max(0, Number(body.size || 0));
+    const existing = completedFiles.get(id);
+
+    if (existing) {
+      writeJson(res, 200, {
+        ok: true,
+        id,
+        complete: true,
+        received: size,
+        chunkSize: CHUNK_SIZE
+      });
+      return;
+    }
+
+    await fsp.mkdir(uploadDir, { recursive: true });
+
+    let meta = null;
+    try {
+      meta = await readUploadMeta(id);
+    } catch {
+      meta = null;
+    }
+
+    if (!meta || meta.size !== size || meta.fileName !== fileName) {
+      meta = {
+        id,
+        fileName,
+        size,
+        createdAt: Date.now(),
+        startedAt: Date.now()
+      };
+      await writeUploadMeta(meta);
+      await fsp.rm(partialUploadPath(id), { force: true });
+    }
+
+    const handle = await fsp.open(partialUploadPath(id), "a");
+    await handle.close();
+
+    const received = (await fsp.stat(partialUploadPath(id))).size;
+    activeTransfers.set(id, {
+      id,
+      fileName,
+      savedName: fileName,
+      size,
+      received,
+      status: "receiving",
+      error: null,
+      startedAt: meta.startedAt || Date.now()
+    });
+    broadcastState();
+
+    writeJson(res, 200, {
+      ok: true,
+      id,
+      received,
+      chunkSize: CHUNK_SIZE
+    });
+  } catch (error) {
+    writeJson(res, 400, {
+      ok: false,
+      error: error.message || "Nao foi possivel iniciar o envio"
+    });
+  }
+}
+
+async function handleUploadStatus(req, res, url) {
+  if (!validateKey(url)) {
+    writeJson(res, 403, { ok: false, error: "Chave invalida" });
+    return;
+  }
+
+  const id = safeUploadId(url.searchParams.get("id"));
+  const complete = completedFiles.has(id);
+
+  try {
+    const meta = complete ? null : await readUploadMeta(id);
+    const received = complete
+      ? completedFiles.get(id).size || 0
+      : (await fsp.stat(partialUploadPath(id))).size;
+
+    writeJson(res, 200, {
+      ok: true,
+      id,
+      complete,
+      received,
+      size: meta ? meta.size : received
+    });
+  } catch {
+    writeJson(res, 200, {
+      ok: true,
+      id,
+      complete: false,
+      received: 0,
+      size: 0
+    });
+  }
+}
+
+async function handleUploadChunk(req, res, url) {
+  if (!validateKey(url)) {
+    writeJson(res, 403, { ok: false, error: "Chave invalida" });
+    req.resume();
+    return;
+  }
+
+  if (req.method !== "POST") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    req.resume();
+    return;
+  }
+
+  const id = safeUploadId(url.searchParams.get("id"));
+  const offset = Math.max(0, Number(url.searchParams.get("offset") || 0));
+
+  let meta = null;
+  try {
+    meta = await readUploadMeta(id);
+  } catch {
+    writeJson(res, 404, { ok: false, error: "Envio nao iniciado", received: 0 });
+    req.resume();
+    return;
+  }
+
+  const partialPath = partialUploadPath(id);
+  const currentSize = (await fsp.stat(partialPath).catch(() => ({ size: 0 }))).size;
+
+  if (offset !== currentSize) {
+    writeJson(res, 409, {
+      ok: false,
+      error: "Offset fora de sincronia",
+      received: currentSize
+    });
+    req.resume();
+    return;
+  }
+
+  const transfer = activeTransfers.get(id) || {
+    id,
+    fileName: meta.fileName,
+    savedName: meta.fileName,
+    size: meta.size,
+    received: currentSize,
+    status: "receiving",
+    error: null,
+    startedAt: meta.startedAt || Date.now()
+  };
+  transfer.status = "receiving";
+  transfer.error = null;
+  activeTransfers.set(id, transfer);
+
+  let received = currentSize;
+  let lastBroadcast = 0;
+  let finished = false;
+  const output = fs.createWriteStream(partialPath, { flags: "r+", start: currentSize });
+
+  function fail(message) {
+    if (finished) return;
+    finished = true;
+    transfer.status = "paused";
+    transfer.error = message;
+    broadcastState();
+    output.destroy();
+    if (!res.headersSent) {
+      writeJson(res, 500, { ok: false, error: message, received });
+    }
+  }
+
+  req.on("data", (chunk) => {
+    received += chunk.length;
+    transfer.received = Math.min(received, meta.size);
+    if (received > meta.size) {
+      fail("Arquivo maior que o esperado");
+      req.destroy();
+      return;
+    }
+    const now = Date.now();
+    if (now - lastBroadcast > 250) {
+      lastBroadcast = now;
+      broadcastState();
+    }
+  });
+
+  req.on("aborted", () => fail("Envio pausado"));
+  req.on("error", () => fail("Erro de rede"));
+  output.on("error", () => fail("Erro ao salvar parte do arquivo"));
+
+  output.on("finish", () => {
+    if (finished) return;
+    finished = true;
+    transfer.received = Math.min(received, meta.size);
+    broadcastState();
+    writeJson(res, 200, {
+      ok: true,
+      id,
+      received: transfer.received
+    });
+  });
+
+  req.pipe(output);
+}
+
+async function handleUploadFinish(req, res, url) {
+  if (!validateKey(url)) {
+    writeJson(res, 403, { ok: false, error: "Chave invalida" });
+    req.resume();
+    return;
+  }
+
+  if (req.method !== "POST") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    req.resume();
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(req);
+    const id = safeUploadId(body.id || url.searchParams.get("id"));
+    const meta = await readUploadMeta(id);
+    const partialPath = partialUploadPath(id);
+    const stat = await fsp.stat(partialPath);
+
+    if (stat.size < meta.size) {
+      writeJson(res, 409, {
+        ok: false,
+        error: "Arquivo ainda incompleto",
+        received: stat.size
+      });
+      return;
+    }
+
+    const targetPath = await uniqueUploadPath(meta.fileName);
+    await fsp.rename(partialPath, targetPath);
+    await fsp.rm(uploadMetaPath(id), { force: true });
+
+    const savedName = path.basename(targetPath);
+    const completedAt = Date.now();
+    const startedAt = meta.startedAt || meta.createdAt || completedAt;
+    const duration = Math.max(0.001, (completedAt - startedAt) / 1000);
+    const transfer = activeTransfers.get(id) || {
+      id,
+      fileName: meta.fileName,
+      savedName,
+      size: meta.size,
+      received: stat.size,
+      status: "complete",
+      error: null,
+      startedAt
+    };
+
+    transfer.savedName = savedName;
+    transfer.received = stat.size;
+    transfer.status = "complete";
+    transfer.error = null;
+
+    const downloadUrl = rememberCompletedUpload({
+      id,
+      fileName: meta.fileName,
+      savedName,
+      targetPath,
+      size: stat.size,
+      duration,
+      completedAt
+    });
+
+    activeTransfers.set(id, transfer);
+    broadcastState();
+
+    setTimeout(() => {
+      activeTransfers.delete(id);
+      broadcastState();
+    }, 5000);
+
+    writeJson(res, 200, {
+      ok: true,
+      id,
+      fileName: meta.fileName,
+      savedName,
+      size: stat.size,
+      duration,
+      downloadUrl
+    });
+  } catch (error) {
+    writeJson(res, 400, {
+      ok: false,
+      error: error.message || "Nao foi possivel finalizar o envio"
+    });
+  }
 }
 
 async function handleDownload(req, res, url) {
@@ -648,6 +1007,26 @@ async function route(req, res) {
 
   if (url.pathname === "/upload") {
     await handleUpload(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/upload/start") {
+    await handleUploadStart(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/upload/status") {
+    await handleUploadStatus(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/upload/chunk") {
+    await handleUploadChunk(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/upload/finish") {
+    await handleUploadFinish(req, res, url);
     return;
   }
 

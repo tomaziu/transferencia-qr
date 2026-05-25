@@ -23,5 +23,6 @@ App local para receber arquivos do celular pela mesma rede Wi-Fi.
 Por padrao, os arquivos recebidos ficam na pasta `recebidos`.
 No painel do computador, use o botao de pasta em **Destino** para escolher outro local de salvamento.
 Na versao hospedada em um servidor, os arquivos ficam temporariamente no servidor e aparecem com um botao de download na lista **Recebidos**.
+O envio e feito em partes. Se a conexao cair, selecione o mesmo arquivo de novo e toque em **Enviar** para continuar de onde parou, enquanto o servidor ainda estiver rodando.
 
 Se o celular nao conseguir abrir o link, confirme se computador e celular estao no mesmo Wi-Fi e permita o acesso do Node.js no Firewall do Windows.

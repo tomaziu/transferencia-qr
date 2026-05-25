@@ -1,5 +1,6 @@
 node_modules/
 recebidos/
 transferencia-config.json
+server-test.*.log
 npm-debug.log*
 *.local
