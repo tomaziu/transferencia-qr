@@ -18,7 +18,7 @@ const key = new URLSearchParams(window.location.search).get("key") || "";
 const DEFAULT_CHUNK_SIZE = 1024 * 1024;
 const MAX_CHUNK_RETRIES = 3;
 const ONE_GB = 1024 * 1024 * 1024;
-const PENDING_UPLOADS_KEY = "transferenciaQrPendingUploads";
+const PENDING_UPLOADS_KEY = `transferenciaQrPendingUploads:${key.slice(0, 16) || "default"}`;
 
 let selectedFiles = [];
 let sending = false;

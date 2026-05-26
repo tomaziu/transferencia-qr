@@ -48,6 +48,7 @@ Versão online de demonstração:
 https://transferencia-qr.onrender.com/
 
 Na versão hospedada, os arquivos ficam temporariamente no servidor e aparecem com um botão de download na lista **Recebidos**.
+Cada navegador que abre o painel recebe um QR Code proprio; os envios feitos por esse QR aparecem apenas naquela sessao.
 
 ## Desenvolvimento
 

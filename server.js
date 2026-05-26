@@ -8,12 +8,12 @@ const QRCode = require("qrcode");
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = "0.0.0.0";
-const TOKEN = crypto.randomBytes(16).toString("hex");
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
 const DEFAULT_UPLOAD_DIR = path.join(ROOT, "recebidos");
 const SETTINGS_FILE = path.join(ROOT, "transferencia-config.json");
 const CHUNK_SIZE = 1024 * 1024;
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -26,10 +26,7 @@ const mimeTypes = new Map([
 ]);
 
 const sseClients = new Set();
-const activeTransfers = new Map();
-const completedFiles = new Map();
-const history = [];
-let cachedConfig = null;
+const sessions = new Map();
 let uploadDir = DEFAULT_UPLOAD_DIR;
 
 const EXPIRED_QR_MESSAGE = "QR Code expirado. Atualize a pagina no computador e escaneie novamente.";
@@ -62,10 +59,74 @@ function getLanAddresses() {
   return results.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
 }
 
-function mobileUrl() {
+function createSessionId() {
+  return crypto.randomBytes(16).toString("hex");
+}
+
+function createSessionKey() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+function safeSessionId(value) {
+  return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+}
+
+function createSession(id = createSessionId()) {
+  const session = {
+    id: safeSessionId(id) || createSessionId(),
+    key: createSessionKey(),
+    activeTransfers: new Map(),
+    completedFiles: new Map(),
+    history: [],
+    configCache: null,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+
+  sessions.set(session.id, session);
+  return session;
+}
+
+function touchSession(session) {
+  session.updatedAt = Date.now();
+  return session;
+}
+
+function getOrCreateSession(id) {
+  const safeId = safeSessionId(id);
+  const existing = safeId ? sessions.get(safeId) : null;
+
+  if (existing) return touchSession(existing);
+
+  return createSession(safeId || createSessionId());
+}
+
+function sessionFromKey(url) {
+  const key = String(url.searchParams.get("key") || "");
+  if (!key) return null;
+
+  for (const session of sessions.values()) {
+    if (session.key === key) return touchSession(session);
+  }
+
+  return null;
+}
+
+function cleanupSessions() {
+  const now = Date.now();
+
+  for (const [id, session] of sessions) {
+    if (session.activeTransfers.size > 0) continue;
+    if (now - session.updatedAt > SESSION_TTL_MS) {
+      sessions.delete(id);
+    }
+  }
+}
+
+function mobileUrl(session) {
   const [first] = getLanAddresses();
   const host = first ? first.address : "localhost";
-  return `http://${host}:${PORT}/send?key=${TOKEN}`;
+  return `http://${host}:${PORT}/send?key=${session.key}`;
 }
 
 function requestOrigin(req) {
@@ -83,33 +144,34 @@ function isLoopbackHost(host) {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
-function sendUrlForRequest(req) {
+function sendUrlForRequest(req, session) {
   const origin = requestOrigin(req);
   const host = String(req?.headers?.host || "").split(",")[0].trim();
 
   if (!origin || isLoopbackHost(host)) {
-    return mobileUrl();
+    return mobileUrl(session);
   }
 
-  return `${origin}/send?key=${TOKEN}`;
+  return `${origin}/send?key=${session.key}`;
 }
 
-async function getConfig(req) {
+async function getConfig(req, session) {
   const addresses = getLanAddresses();
-  const sendUrl = sendUrlForRequest(req);
+  const sendUrl = sendUrlForRequest(req, session);
 
-  if (cachedConfig && cachedConfig.sendUrl === sendUrl) {
+  if (session.configCache && session.configCache.sendUrl === sendUrl) {
     return {
-      ...cachedConfig,
+      ...session.configCache,
       addresses: addresses.map((item) => ({
         name: item.name,
         address: item.address,
-        url: `${item.url}/send?key=${TOKEN}`
+        url: `${item.url}/send?key=${session.key}`
       }))
     };
   }
 
-  cachedConfig = {
+  session.configCache = {
+    sessionId: session.id,
     appUrl: `http://localhost:${PORT}`,
     sendUrl,
     qrCode: await QRCode.toDataURL(sendUrl, {
@@ -124,11 +186,11 @@ async function getConfig(req) {
     addresses: addresses.map((item) => ({
       name: item.name,
       address: item.address,
-      url: `${item.url}/send?key=${TOKEN}`
+      url: `${item.url}/send?key=${session.key}`
     }))
   };
 
-  return cachedConfig;
+  return session.configCache;
 }
 
 async function loadSettings() {
@@ -222,10 +284,10 @@ function publicHistoryItem(item) {
   };
 }
 
-function publicState() {
+function publicState(session) {
   return {
-    active: Array.from(activeTransfers.values()).map(formatPublicTransfer),
-    history: history.slice(0, 12).map(publicHistoryItem)
+    active: Array.from(session.activeTransfers.values()).map(formatPublicTransfer),
+    history: session.history.slice(0, 12).map(publicHistoryItem)
   };
 }
 
@@ -399,14 +461,17 @@ async function handleFolders(req, res, url) {
   }
 }
 
-function sendSseState(res) {
-  res.write(`event: state\ndata: ${JSON.stringify(publicState())}\n\n`);
+function sendSseState(res, session) {
+  res.write(`event: state\ndata: ${JSON.stringify(publicState(session))}\n\n`);
 }
 
-function broadcastState() {
-  const payload = `event: state\ndata: ${JSON.stringify(publicState())}\n\n`;
+function broadcastState(session) {
+  const payload = `event: state\ndata: ${JSON.stringify(publicState(session))}\n\n`;
+
   for (const client of sseClients) {
-    client.write(payload);
+    if (client.sessionId === session.id) {
+      client.res.write(payload);
+    }
   }
 }
 
@@ -440,25 +505,25 @@ function safeUploadId(value) {
   return id || crypto.randomUUID();
 }
 
-function partialUploadPath(id) {
-  return path.join(uploadDir, `.upload-${safeUploadId(id)}.part`);
+function partialUploadPath(session, id) {
+  return path.join(uploadDir, `.upload-${safeSessionId(session.id)}-${safeUploadId(id)}.part`);
 }
 
-function uploadMetaPath(id) {
-  return path.join(uploadDir, `.upload-${safeUploadId(id)}.json`);
+function uploadMetaPath(session, id) {
+  return path.join(uploadDir, `.upload-${safeSessionId(session.id)}-${safeUploadId(id)}.json`);
 }
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function removeUploadFiles(id) {
+async function removeUploadFiles(session, id) {
   let lastError = null;
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const results = await Promise.allSettled([
-      fsp.rm(partialUploadPath(id), { force: true }),
-      fsp.rm(uploadMetaPath(id), { force: true })
+      fsp.rm(partialUploadPath(session, id), { force: true }),
+      fsp.rm(uploadMetaPath(session, id), { force: true })
     ]);
     const failed = results.find((result) => result.status === "rejected");
 
@@ -471,20 +536,20 @@ async function removeUploadFiles(id) {
   throw lastError;
 }
 
-async function readUploadMeta(id) {
-  const raw = await fsp.readFile(uploadMetaPath(id), "utf8");
+async function readUploadMeta(session, id) {
+  const raw = await fsp.readFile(uploadMetaPath(session, id), "utf8");
   return JSON.parse(raw);
 }
 
-async function writeUploadMeta(meta) {
-  await fsp.writeFile(uploadMetaPath(meta.id), JSON.stringify(meta, null, 2));
+async function writeUploadMeta(session, meta) {
+  await fsp.writeFile(uploadMetaPath(session, meta.id), JSON.stringify(meta, null, 2));
 }
 
-function rememberCompletedUpload({ id, fileName, savedName, targetPath, size, duration, completedAt }) {
+function rememberCompletedUpload(session, { id, fileName, savedName, targetPath, size, duration, completedAt }) {
   const downloadToken = crypto.randomBytes(16).toString("hex");
-  const downloadUrl = `/download?id=${encodeURIComponent(id)}&token=${downloadToken}`;
+  const downloadUrl = `/download?session=${encodeURIComponent(session.id)}&id=${encodeURIComponent(id)}&token=${downloadToken}`;
 
-  completedFiles.set(id, {
+  session.completedFiles.set(id, {
     fileName,
     savedName,
     targetPath,
@@ -492,7 +557,7 @@ function rememberCompletedUpload({ id, fileName, savedName, targetPath, size, du
     downloadToken
   });
 
-  history.unshift({
+  session.history.unshift({
     id,
     fileName,
     savedName,
@@ -502,7 +567,7 @@ function rememberCompletedUpload({ id, fileName, savedName, targetPath, size, du
     location: uploadLocationLabel(targetPath),
     downloadUrl
   });
-  history.splice(12);
+  session.history.splice(12);
 
   return downloadUrl;
 }
@@ -535,15 +600,25 @@ async function serveStatic(res, filePath) {
 }
 
 function validateKey(url) {
-  return url.searchParams.get("key") === TOKEN;
+  return Boolean(sessionFromKey(url));
+}
+
+function requireUploadSession(req, res, url, { json = true } = {}) {
+  const session = sessionFromKey(url);
+  if (session) return session;
+
+  if (json) {
+    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
+  } else {
+    serveText(res, 403, EXPIRED_QR_MESSAGE);
+  }
+  req.resume();
+  return null;
 }
 
 async function handleUpload(req, res, url) {
-  if (!validateKey(url)) {
-    serveText(res, 403, EXPIRED_QR_MESSAGE);
-    req.resume();
-    return;
-  }
+  const session = requireUploadSession(req, res, url, { json: false });
+  if (!session) return;
 
   if (req.method !== "POST") {
     serveText(res, 405, "Metodo nao permitido");
@@ -567,8 +642,8 @@ async function handleUpload(req, res, url) {
     startedAt: Date.now()
   };
 
-  activeTransfers.set(id, transfer);
-  broadcastState();
+  session.activeTransfers.set(id, transfer);
+  broadcastState(session);
 
   let lastBroadcast = 0;
   let finished = false;
@@ -579,13 +654,13 @@ async function handleUpload(req, res, url) {
     finished = true;
     transfer.status = "error";
     transfer.error = message;
-    broadcastState();
+    broadcastState(session);
     output.destroy();
     fsp.unlink(targetPath).catch(() => {});
     if (!res.headersSent) serveText(res, 500, message);
     setTimeout(() => {
-      activeTransfers.delete(id);
-      broadcastState();
+      session.activeTransfers.delete(id);
+      broadcastState(session);
     }, 6000);
   }
 
@@ -594,7 +669,7 @@ async function handleUpload(req, res, url) {
     const now = Date.now();
     if (now - lastBroadcast > 250) {
       lastBroadcast = now;
-      broadcastState();
+      broadcastState(session);
     }
   });
 
@@ -610,7 +685,7 @@ async function handleUpload(req, res, url) {
     transfer.received = size || transfer.received;
     const completedAt = Date.now();
     const duration = Math.max(0.001, (completedAt - transfer.startedAt) / 1000);
-    const downloadUrl = rememberCompletedUpload({
+    const downloadUrl = rememberCompletedUpload(session, {
       id,
       fileName,
       savedName,
@@ -628,11 +703,11 @@ async function handleUpload(req, res, url) {
       duration,
       downloadUrl
     });
-    broadcastState();
+    broadcastState(session);
 
     setTimeout(() => {
-      activeTransfers.delete(id);
-      broadcastState();
+      session.activeTransfers.delete(id);
+      broadcastState(session);
     }, 5000);
   });
 
@@ -640,11 +715,8 @@ async function handleUpload(req, res, url) {
 }
 
 async function handleUploadStart(req, res, url) {
-  if (!validateKey(url)) {
-    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
-    req.resume();
-    return;
-  }
+  const session = requireUploadSession(req, res, url);
+  if (!session) return;
 
   if (req.method !== "POST") {
     writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
@@ -657,7 +729,7 @@ async function handleUploadStart(req, res, url) {
     const id = safeUploadId(body.id);
     const fileName = sanitizeFileName(body.fileName);
     const size = Math.max(0, Number(body.size || 0));
-    const existing = completedFiles.get(id);
+    const existing = session.completedFiles.get(id);
 
     if (existing) {
       writeJson(res, 200, {
@@ -674,7 +746,7 @@ async function handleUploadStart(req, res, url) {
 
     let meta = null;
     try {
-      meta = await readUploadMeta(id);
+      meta = await readUploadMeta(session, id);
     } catch {
       meta = null;
     }
@@ -682,20 +754,21 @@ async function handleUploadStart(req, res, url) {
     if (!meta || meta.size !== size || meta.fileName !== fileName) {
       meta = {
         id,
+        sessionId: session.id,
         fileName,
         size,
         createdAt: Date.now(),
         startedAt: Date.now()
       };
-      await writeUploadMeta(meta);
-      await fsp.rm(partialUploadPath(id), { force: true });
+      await writeUploadMeta(session, meta);
+      await fsp.rm(partialUploadPath(session, id), { force: true });
     }
 
-    const handle = await fsp.open(partialUploadPath(id), "a");
+    const handle = await fsp.open(partialUploadPath(session, id), "a");
     await handle.close();
 
-    const received = (await fsp.stat(partialUploadPath(id))).size;
-    activeTransfers.set(id, {
+    const received = (await fsp.stat(partialUploadPath(session, id))).size;
+    session.activeTransfers.set(id, {
       id,
       fileName,
       savedName: fileName,
@@ -705,7 +778,7 @@ async function handleUploadStart(req, res, url) {
       error: null,
       startedAt: meta.startedAt || Date.now()
     });
-    broadcastState();
+    broadcastState(session);
 
     writeJson(res, 200, {
       ok: true,
@@ -722,19 +795,17 @@ async function handleUploadStart(req, res, url) {
 }
 
 async function handleUploadStatus(req, res, url) {
-  if (!validateKey(url)) {
-    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
-    return;
-  }
+  const session = requireUploadSession(req, res, url);
+  if (!session) return;
 
   const id = safeUploadId(url.searchParams.get("id"));
-  const complete = completedFiles.has(id);
+  const complete = session.completedFiles.has(id);
 
   try {
-    const meta = complete ? null : await readUploadMeta(id);
+    const meta = complete ? null : await readUploadMeta(session, id);
     const received = complete
-      ? completedFiles.get(id).size || 0
-      : (await fsp.stat(partialUploadPath(id))).size;
+      ? session.completedFiles.get(id).size || 0
+      : (await fsp.stat(partialUploadPath(session, id))).size;
 
     writeJson(res, 200, {
       ok: true,
@@ -755,11 +826,8 @@ async function handleUploadStatus(req, res, url) {
 }
 
 async function handleUploadCancel(req, res, url) {
-  if (!validateKey(url)) {
-    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
-    req.resume();
-    return;
-  }
+  const session = requireUploadSession(req, res, url);
+  if (!session) return;
 
   if (req.method !== "POST" && req.method !== "DELETE") {
     writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
@@ -771,10 +839,10 @@ async function handleUploadCancel(req, res, url) {
     const body = req.method === "POST" ? await readJsonBody(req) : {};
     const id = safeUploadId(body.id || url.searchParams.get("id"));
 
-    await removeUploadFiles(id);
+    await removeUploadFiles(session, id);
 
-    activeTransfers.delete(id);
-    broadcastState();
+    session.activeTransfers.delete(id);
+    broadcastState(session);
 
     writeJson(res, 200, {
       ok: true,
@@ -790,11 +858,8 @@ async function handleUploadCancel(req, res, url) {
 }
 
 async function handleUploadChunk(req, res, url) {
-  if (!validateKey(url)) {
-    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
-    req.resume();
-    return;
-  }
+  const session = requireUploadSession(req, res, url);
+  if (!session) return;
 
   if (req.method !== "POST") {
     writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
@@ -807,14 +872,14 @@ async function handleUploadChunk(req, res, url) {
 
   let meta = null;
   try {
-    meta = await readUploadMeta(id);
+    meta = await readUploadMeta(session, id);
   } catch {
     writeJson(res, 404, { ok: false, error: "Envio nao iniciado", received: 0 });
     req.resume();
     return;
   }
 
-  const partialPath = partialUploadPath(id);
+  const partialPath = partialUploadPath(session, id);
   const currentSize = (await fsp.stat(partialPath).catch(() => ({ size: 0 }))).size;
 
   if (offset !== currentSize) {
@@ -827,7 +892,7 @@ async function handleUploadChunk(req, res, url) {
     return;
   }
 
-  const transfer = activeTransfers.get(id) || {
+  const transfer = session.activeTransfers.get(id) || {
     id,
     fileName: meta.fileName,
     savedName: meta.fileName,
@@ -839,7 +904,7 @@ async function handleUploadChunk(req, res, url) {
   };
   transfer.status = "receiving";
   transfer.error = null;
-  activeTransfers.set(id, transfer);
+  session.activeTransfers.set(id, transfer);
 
   let received = currentSize;
   let lastBroadcast = 0;
@@ -851,7 +916,7 @@ async function handleUploadChunk(req, res, url) {
     finished = true;
     transfer.status = "paused";
     transfer.error = message;
-    broadcastState();
+    broadcastState(session);
     output.destroy();
     if (!res.headersSent) {
       writeJson(res, 500, { ok: false, error: message, received });
@@ -869,7 +934,7 @@ async function handleUploadChunk(req, res, url) {
     const now = Date.now();
     if (now - lastBroadcast > 250) {
       lastBroadcast = now;
-      broadcastState();
+      broadcastState(session);
     }
   });
 
@@ -881,7 +946,7 @@ async function handleUploadChunk(req, res, url) {
     if (finished) return;
     finished = true;
     transfer.received = Math.min(received, meta.size);
-    broadcastState();
+    broadcastState(session);
     writeJson(res, 200, {
       ok: true,
       id,
@@ -893,11 +958,8 @@ async function handleUploadChunk(req, res, url) {
 }
 
 async function handleUploadFinish(req, res, url) {
-  if (!validateKey(url)) {
-    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
-    req.resume();
-    return;
-  }
+  const session = requireUploadSession(req, res, url);
+  if (!session) return;
 
   if (req.method !== "POST") {
     writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
@@ -908,8 +970,8 @@ async function handleUploadFinish(req, res, url) {
   try {
     const body = await readJsonBody(req);
     const id = safeUploadId(body.id || url.searchParams.get("id"));
-    const meta = await readUploadMeta(id);
-    const partialPath = partialUploadPath(id);
+    const meta = await readUploadMeta(session, id);
+    const partialPath = partialUploadPath(session, id);
     const stat = await fsp.stat(partialPath);
 
     if (stat.size < meta.size) {
@@ -923,13 +985,13 @@ async function handleUploadFinish(req, res, url) {
 
     const targetPath = await uniqueUploadPath(meta.fileName);
     await fsp.rename(partialPath, targetPath);
-    await fsp.rm(uploadMetaPath(id), { force: true });
+    await fsp.rm(uploadMetaPath(session, id), { force: true });
 
     const savedName = path.basename(targetPath);
     const completedAt = Date.now();
     const startedAt = meta.startedAt || meta.createdAt || completedAt;
     const duration = Math.max(0.001, (completedAt - startedAt) / 1000);
-    const transfer = activeTransfers.get(id) || {
+    const transfer = session.activeTransfers.get(id) || {
       id,
       fileName: meta.fileName,
       savedName,
@@ -945,7 +1007,7 @@ async function handleUploadFinish(req, res, url) {
     transfer.status = "complete";
     transfer.error = null;
 
-    const downloadUrl = rememberCompletedUpload({
+    const downloadUrl = rememberCompletedUpload(session, {
       id,
       fileName: meta.fileName,
       savedName,
@@ -955,12 +1017,12 @@ async function handleUploadFinish(req, res, url) {
       completedAt
     });
 
-    activeTransfers.set(id, transfer);
-    broadcastState();
+    session.activeTransfers.set(id, transfer);
+    broadcastState(session);
 
     setTimeout(() => {
-      activeTransfers.delete(id);
-      broadcastState();
+      session.activeTransfers.delete(id);
+      broadcastState(session);
     }, 5000);
 
     writeJson(res, 200, {
@@ -988,7 +1050,8 @@ async function handleDownload(req, res, url) {
 
   const id = url.searchParams.get("id");
   const token = url.searchParams.get("token");
-  const file = completedFiles.get(id);
+  const session = sessions.get(safeSessionId(url.searchParams.get("session")));
+  const file = session?.completedFiles.get(id);
 
   if (!file || file.downloadToken !== token) {
     serveText(res, 404, "Arquivo nao encontrado");
@@ -1031,7 +1094,8 @@ async function route(req, res) {
 
   if (url.pathname === "/api/config") {
     const isLocal = isLocalRequest(req);
-    const config = await getConfig(req);
+    const session = getOrCreateSession(url.searchParams.get("session"));
+    const config = await getConfig(req, session);
 
     writeJson(res, 200, {
       ...config,
@@ -1042,7 +1106,8 @@ async function route(req, res) {
   }
 
   if (url.pathname === "/api/state") {
-    writeJson(res, 200, publicState());
+    const session = getOrCreateSession(url.searchParams.get("session"));
+    writeJson(res, 200, publicState(session));
     return;
   }
 
@@ -1057,15 +1122,17 @@ async function route(req, res) {
   }
 
   if (url.pathname === "/events") {
+    const session = getOrCreateSession(url.searchParams.get("session"));
     res.writeHead(200, {
       "content-type": "text/event-stream; charset=utf-8",
       "cache-control": "no-cache, no-transform",
       connection: "keep-alive",
       "x-accel-buffering": "no"
     });
-    sseClients.add(res);
-    sendSseState(res);
-    req.on("close", () => sseClients.delete(res));
+    const client = { res, sessionId: session.id };
+    sseClients.add(client);
+    sendSseState(res, session);
+    req.on("close", () => sseClients.delete(client));
     return;
   }
 
@@ -1125,15 +1192,14 @@ async function main() {
   });
 
   server.listen(PORT, HOST, async () => {
-    const config = await getConfig();
     const addresses = getLanAddresses();
 
     console.log("");
     console.log("Transferencia por QR Code");
     console.log(`Computador: http://localhost:${PORT}`);
-    console.log(`Celular:    ${config.sendUrl}`);
-    for (const item of addresses.slice(1)) {
-      console.log(`Alternativo ${item.name}: ${item.url}/send?key=${TOKEN}`);
+    console.log("Abra o painel no computador para gerar um QR Code exclusivo desta sessao.");
+    for (const item of addresses) {
+      console.log(`Rede ${item.name}: ${item.url}`);
     }
     console.log("");
     console.log("Arquivos recebidos serao salvos em:");
@@ -1141,6 +1207,8 @@ async function main() {
     console.log("");
   });
 }
+
+setInterval(cleanupSessions, 60 * 60 * 1000).unref();
 
 main().catch((error) => {
   console.error(error);

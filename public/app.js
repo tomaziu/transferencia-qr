@@ -27,10 +27,42 @@ const folderList = document.querySelector("#folderList");
 const folderError = document.querySelector("#folderError");
 const saveFolderButton = document.querySelector("#saveFolderButton");
 
+const RECEIVER_SESSION_KEY = "transferenciaQrReceiverSession";
+
 let currentFolder = null;
 let parentFolder = null;
 let currentSendUrl = "";
 let destinationLoaded = false;
+const receiverSessionId = getReceiverSessionId();
+
+function createReceiverSessionId() {
+  if (globalThis.crypto?.getRandomValues) {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+
+  return `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
+}
+
+function getReceiverSessionId() {
+  try {
+    const existing = localStorage.getItem(RECEIVER_SESSION_KEY);
+    if (/^[a-zA-Z0-9_-]{16,64}$/.test(existing || "")) return existing;
+
+    const created = createReceiverSessionId();
+    localStorage.setItem(RECEIVER_SESSION_KEY, created);
+    return created;
+  } catch {
+    return createReceiverSessionId();
+  }
+}
+
+function sessionUrl(path) {
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}session=${encodeURIComponent(receiverSessionId)}`;
+}
+
 
 function formatBytes(bytes) {
   if (!bytes) return "0 B";
@@ -299,14 +331,14 @@ async function saveDestination() {
 }
 
 async function loadConfig() {
-  const response = await fetch("/api/config");
+  const response = await fetch(sessionUrl("/api/config"));
   const config = await response.json();
   applyConfig(config);
 }
 
 async function checkQrCodeFreshness() {
   try {
-    const response = await fetch("/api/config", { cache: "no-store" });
+    const response = await fetch(sessionUrl("/api/config"), { cache: "no-store" });
     const config = await response.json();
     applyConfig(config, { notify: true });
   } catch {
@@ -315,7 +347,7 @@ async function checkQrCodeFreshness() {
 }
 
 function connectEvents() {
-  const source = new EventSource("/events");
+  const source = new EventSource(sessionUrl("/events"));
 
   source.addEventListener("open", () => setConnection(true));
   source.addEventListener("error", () => setConnection(false));
