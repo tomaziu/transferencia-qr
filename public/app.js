@@ -27,6 +27,7 @@ const emptyState = document.querySelector("#emptyState");
 const historyList = document.querySelector("#historyList");
 const historyCount = document.querySelector("#historyCount");
 const clearHistoryButton = document.querySelector("#clearHistoryButton");
+const downloadBundleButton = document.querySelector("#downloadBundleButton");
 const destinationBox = document.querySelector("#destinationBox");
 const currentDestination = document.querySelector("#currentDestination");
 const openFolderButton = document.querySelector("#openFolderButton");
@@ -293,6 +294,16 @@ function renderHistory(items) {
   historyCount.textContent = String(items.length);
   clearHistoryButton.disabled = items.length === 0;
   historyList.innerHTML = "";
+
+  const downloadable = items.filter((item) => item.downloadUrl);
+  if (downloadable.length > 1) {
+    const ids = downloadable.map((item) => item.id);
+    const tokens = downloadable.map((item) => new URL(item.downloadUrl, window.location.origin).searchParams.get("token") || "");
+    downloadBundleButton.hidden = false;
+    downloadBundleButton.href = `/download/bundle?session=${encodeURIComponent(receiverSessionId)}&ids=${ids.map(encodeURIComponent).join(",")}&tokens=${tokens.map(encodeURIComponent).join(",")}`;
+  } else {
+    downloadBundleButton.hidden = true;
+  }
 
   if (!items.length) {
     const empty = document.createElement("div");

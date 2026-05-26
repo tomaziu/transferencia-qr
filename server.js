@@ -1837,6 +1837,45 @@ async function handleDownload(req, res, url) {
   }
 }
 
+async function handleDownloadBundle(req, res, url) {
+  if (req.method !== "GET") {
+    serveText(res, 405, "Metodo nao permitido");
+    return;
+  }
+
+  const session = sessions.get(safeSessionId(url.searchParams.get("session")));
+  if (!session) {
+    serveText(res, 404, "Sessao nao encontrada");
+    return;
+  }
+
+  const ids = (url.searchParams.get("ids") || "").split(",").filter(Boolean);
+  const tokens = (url.searchParams.get("tokens") || "").split(",").filter(Boolean);
+
+  if (!ids.length || ids.length !== tokens.length) {
+    serveText(res, 400, "Parametros invalidos");
+    return;
+  }
+
+  const files = [];
+  for (let i = 0; i < ids.length; i += 1) {
+    const file = session.completedFiles.get(ids[i]);
+    if (!file || file.downloadToken !== tokens[i]) {
+      serveText(res, 404, "Um ou mais arquivos nao encontrados");
+      return;
+    }
+    files.push({ fileName: file.savedName, targetPath: file.targetPath });
+  }
+
+  try {
+    await sendZip(res, "recebidos.zip", files);
+  } catch (error) {
+    if (!res.headersSent) {
+      serveText(res, 500, error.message || "Erro ao gerar ZIP");
+    }
+  }
+}
+
 async function handleShareStart(req, res, url) {
   const session = getOrCreateSession(url.searchParams.get("session"));
 
@@ -2485,6 +2524,11 @@ async function route(req, res) {
 
   if (url.pathname === "/download") {
     await handleDownload(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/download/bundle") {
+    await handleDownloadBundle(req, res, url);
     return;
   }
 
