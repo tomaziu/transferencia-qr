@@ -10,6 +10,7 @@ const mobileConnectionDot = document.querySelector("#mobileConnectionDot");
 const mobileConnectionText = document.querySelector("#mobileConnectionText");
 const themeToggle = document.querySelector("#themeToggle");
 const sessionPin = document.querySelector("#sessionPin");
+const pinVisibilityButton = document.querySelector("#pinVisibilityButton");
 const renewQrButton = document.querySelector("#renewQrButton");
 const endSessionButton = document.querySelector("#endSessionButton");
 const currentTitle = document.querySelector("#currentTitle");
@@ -73,6 +74,8 @@ let activeShareId = null;
 let shareStopRequested = false;
 let latestNoteUpdatedAt = 0;
 let noteSaveTimer = null;
+let currentSessionPin = "";
+let pinVisible = false;
 const receiverSessionId = getReceiverSessionId();
 
 function createReceiverSessionId() {
@@ -193,6 +196,21 @@ function showQrNotice(message) {
   qrNotice.classList.remove("hidden");
 }
 
+function renderSessionPin() {
+  sessionPin.textContent = pinVisible && currentSessionPin ? currentSessionPin : "******";
+  pinVisibilityButton.setAttribute("aria-pressed", String(pinVisible));
+  pinVisibilityButton.title = pinVisible ? "Esconder PIN" : "Mostrar PIN";
+  pinVisibilityButton.setAttribute("aria-label", pinVisible ? "Esconder PIN" : "Mostrar PIN");
+}
+
+function setSessionPin(pin) {
+  const nextPin = String(pin || "");
+  if (nextPin !== currentSessionPin) pinVisible = false;
+  currentSessionPin = nextPin;
+  if (!currentSessionPin) pinVisible = false;
+  renderSessionPin();
+}
+
 function applyConfig(config, { notify = false } = {}) {
   const changed = currentSendUrl && currentSendUrl !== config.sendUrl;
   const shouldUpdateQr = !currentSendUrl || changed;
@@ -206,7 +224,7 @@ function applyConfig(config, { notify = false } = {}) {
   }
 
   sendLink.value = config.sendUrl;
-  sessionPin.textContent = config.pin || "------";
+  setSessionPin(config.pin);
   renderAddresses(config.addresses || []);
 
   if (changed && notify) {
@@ -1053,6 +1071,11 @@ noteCopyButton.addEventListener("click", async () => {
 themeToggle.addEventListener("click", () => {
   const currentTheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
   applyTheme(currentTheme === "dark" ? "light" : "dark");
+});
+
+pinVisibilityButton.addEventListener("click", () => {
+  pinVisible = !pinVisible;
+  renderSessionPin();
 });
 
 renewQrButton.addEventListener("click", () => {

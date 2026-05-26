@@ -10,6 +10,8 @@
   --blue: #2364aa;
   --amber: #c27a12;
   --danger: #b23a48;
+  --action-bg: #102030;
+  --action-fg: #ffffff;
   --shadow: 0 20px 70px rgba(15, 35, 48, 0.12);
 }
 
@@ -25,6 +27,8 @@
   --blue: #7fb2ef;
   --amber: #e5a844;
   --danger: #ff7f91;
+  --action-bg: #2bc2b7;
+  --action-fg: #071311;
   --shadow: 0 20px 70px rgba(0, 0, 0, 0.28);
 }
 
@@ -516,6 +520,44 @@ h3 {
   letter-spacing: 0;
 }
 
+.pin-value-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pin-eye-button {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 86%, var(--bg));
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.pin-eye-button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pin-eye-button .eye-closed,
+.pin-eye-button[aria-pressed="true"] .eye-open {
+  display: none;
+}
+
+.pin-eye-button[aria-pressed="true"] .eye-closed {
+  display: block;
+}
+
 .qr-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -526,6 +568,39 @@ h3 {
 .danger-button {
   border-color: rgba(178, 58, 72, 0.35);
   color: var(--danger);
+}
+
+.has-tooltip {
+  position: relative;
+}
+
+.has-tooltip::after {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  z-index: 15;
+  width: min(280px, 80vw);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--action-bg);
+  color: var(--action-fg);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
+  content: attr(data-tooltip);
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  text-align: left;
+  transform: translate(-50%, 6px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.has-tooltip:hover::after,
+.has-tooltip:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .note-actions {
@@ -577,8 +652,8 @@ h3 {
 .icon-button {
   width: 44px;
   height: 44px;
-  background: var(--ink);
-  color: #fff;
+  background: var(--action-bg);
+  color: var(--action-fg);
 }
 
 .icon-button:disabled,
@@ -947,8 +1022,8 @@ h3 {
   flex: 0 0 auto;
   place-items: center;
   border-radius: 8px;
-  background: var(--ink);
-  color: #fff;
+  background: var(--action-bg);
+  color: var(--action-fg);
 }
 
 .download-button svg {
@@ -1408,6 +1483,14 @@ h3 {
   .qr-actions,
   .pin-entry {
     grid-template-columns: 1fr;
+  }
+
+  .pin-box {
+    grid-template-columns: 1fr;
+  }
+
+  .pin-value-row {
+    justify-content: space-between;
   }
 
   .status-separator {

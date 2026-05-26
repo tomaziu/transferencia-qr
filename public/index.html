@@ -45,7 +45,21 @@
 
           <div class="pin-box" aria-live="polite">
             <span>PIN de seguranca</span>
-            <strong id="sessionPin">------</strong>
+            <div class="pin-value-row">
+              <strong id="sessionPin">******</strong>
+              <button id="pinVisibilityButton" type="button" class="pin-eye-button" title="Mostrar PIN" aria-label="Mostrar PIN" aria-pressed="false">
+                <svg class="eye-open" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+                <svg class="eye-closed" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 3l18 18"></path>
+                  <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"></path>
+                  <path d="M9.9 5.2A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.8 17.8 0 0 1-3 4.1"></path>
+                  <path d="M6.7 6.7C3.7 8.6 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 4.3-1"></path>
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div class="qr-notice hidden" id="qrNotice" aria-live="polite"></div>
@@ -53,8 +67,8 @@
           <div class="address-list" id="addressList"></div>
 
           <div class="qr-actions">
-            <button id="renewQrButton" type="button" class="secondary-button compact-button">Renovar QR</button>
-            <button id="endSessionButton" type="button" class="secondary-button compact-button danger-button">Encerrar sessao</button>
+            <button id="renewQrButton" type="button" class="secondary-button compact-button has-tooltip" title="Troca o QR Code e o PIN, mas mantem historico, bloco de notas e arquivos preparados." data-tooltip="Troca o QR Code e o PIN. Mantem historico, bloco de notas e arquivos preparados.">Renovar QR</button>
+            <button id="endSessionButton" type="button" class="secondary-button compact-button danger-button has-tooltip" title="Faz um reset geral: troca QR/PIN e limpa historico, links antigos, bloco de notas e temporarios." data-tooltip="Reset geral. Troca QR/PIN e limpa historico, links antigos, bloco de notas e temporarios.">Encerrar sessao</button>
           </div>
 
           <div class="destination-box" id="destinationBox" hidden>
