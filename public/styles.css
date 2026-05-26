@@ -488,6 +488,10 @@ h3 {
 }
 
 .qr-notice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  gap: 10px;
+  align-items: start;
   margin-top: 12px;
   border: 1px solid rgba(194, 122, 18, 0.38);
   border-radius: 8px;
@@ -496,6 +500,34 @@ h3 {
   color: var(--ink);
   font-size: 0.92rem;
   line-height: 1.45;
+}
+
+.qr-notice button {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid rgba(194, 122, 18, 0.32);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.qr-notice button:hover,
+.qr-notice button:focus-visible {
+  background: rgba(194, 122, 18, 0.14);
+  outline: none;
+}
+
+.qr-notice svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .pin-box {

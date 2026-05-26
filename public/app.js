@@ -3,6 +3,8 @@ const qrLoader = document.querySelector("#qrLoader");
 const sendLink = document.querySelector("#sendLink");
 const copyButton = document.querySelector("#copyButton");
 const qrNotice = document.querySelector("#qrNotice");
+const qrNoticeText = document.querySelector("#qrNoticeText");
+const qrNoticeClose = document.querySelector("#qrNoticeClose");
 const addressList = document.querySelector("#addressList");
 const connectionDot = document.querySelector("#connectionDot");
 const connectionText = document.querySelector("#connectionText");
@@ -192,8 +194,13 @@ function renderAddresses(addresses) {
 }
 
 function showQrNotice(message) {
-  qrNotice.textContent = message;
+  qrNoticeText.textContent = message;
   qrNotice.classList.remove("hidden");
+}
+
+function hideQrNotice() {
+  qrNotice.classList.add("hidden");
+  qrNoticeText.textContent = "";
 }
 
 function renderSessionPin() {
@@ -897,6 +904,8 @@ copyButton.addEventListener("click", async () => {
     copyButton.title = "Copiar link";
   }, 1200);
 });
+
+qrNoticeClose.addEventListener("click", hideQrNotice);
 
 function folderNameFromFiles(files) {
   const firstPath = files.find((file) => file.relativePath || file.webkitRelativePath);
