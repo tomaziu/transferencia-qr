@@ -4,6 +4,32 @@ const downloadFileSize = document.querySelector("#downloadFileSize");
 const downloadFileButton = document.querySelector("#downloadFileButton");
 const downloadList = document.querySelector("#downloadList");
 const downloadMessage = document.querySelector("#downloadMessage");
+const themeToggle = document.querySelector("#themeToggle");
+const THEME_KEY = "transferenciaQrTheme";
+
+function preferredTheme() {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === "dark" || saved === "light") return saved;
+  } catch {
+    // Theme persistence is optional.
+  }
+
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyTheme(theme) {
+  const safeTheme = theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = safeTheme;
+  themeToggle.textContent = safeTheme === "dark" ? "Tema claro" : "Tema escuro";
+  themeToggle.setAttribute("aria-pressed", String(safeTheme === "dark"));
+
+  try {
+    localStorage.setItem(THEME_KEY, safeTheme);
+  } catch {
+    // Ignore storage errors.
+  }
+}
 
 function formatBytes(bytes) {
   if (!bytes) return "0 B";
@@ -84,6 +110,13 @@ async function loadSharedFile() {
     ? "Use o ZIP para manter pastas e subpastas. Downloads individuais salvam arquivos soltos."
     : "O navegador do celular decide a pasta de salvamento.";
 }
+
+themeToggle.addEventListener("click", () => {
+  const currentTheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  applyTheme(currentTheme === "dark" ? "light" : "dark");
+});
+
+applyTheme(preferredTheme());
 
 loadSharedFile().catch((error) => {
   shareStatus.textContent = "Indisponivel";

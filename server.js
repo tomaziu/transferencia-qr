@@ -16,6 +16,8 @@ const SETTINGS_FILE = path.join(ROOT, "transferencia-config.json");
 const CHUNK_SIZE = 1024 * 1024;
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const NOTE_MAX_LENGTH = 20000;
+const MOBILE_AUTH_TTL_MS = SESSION_TTL_MS;
+const PIN_DIGITS = 6;
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -32,6 +34,7 @@ const sessions = new Map();
 let uploadDir = DEFAULT_UPLOAD_DIR;
 
 const EXPIRED_QR_MESSAGE = "QR Code expirado. Atualize a pagina no computador e escaneie novamente.";
+const PIN_REQUIRED_MESSAGE = "Digite o PIN mostrado no computador para continuar.";
 
 function getLanAddresses() {
   const results = [];
@@ -69,6 +72,15 @@ function createSessionKey() {
   return crypto.randomBytes(24).toString("hex");
 }
 
+function createSessionPin() {
+  const max = 10 ** PIN_DIGITS;
+  return String(crypto.randomInt(0, max)).padStart(PIN_DIGITS, "0");
+}
+
+function createMobileAuthToken() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
 function safeSessionId(value) {
   return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
 }
@@ -77,6 +89,9 @@ function createSession(id = createSessionId()) {
   const session = {
     id: safeSessionId(id) || createSessionId(),
     key: createSessionKey(),
+    pin: createSessionPin(),
+    mobileAuthTokens: new Map(),
+    mobileClients: new Map(),
     activeTransfers: new Map(),
     completedFiles: new Map(),
     sharedFiles: new Map(),
@@ -107,20 +122,56 @@ function getOrCreateSession(id) {
   return createSession(safeId || createSessionId());
 }
 
-function sessionFromKey(url) {
+function normalizeMobileAuthToken(value) {
+  return String(value || "").replace(/[^a-fA-F0-9]/g, "").slice(0, 64);
+}
+
+function mobileAuthTokenFromRequest(req, url) {
+  const header = req.headers["x-mobile-auth"];
+  const headerValue = Array.isArray(header) ? header[0] : header;
+  return normalizeMobileAuthToken(url.searchParams.get("auth") || headerValue);
+}
+
+function sessionByKey(url) {
   const key = String(url.searchParams.get("key") || "");
   if (!key) return null;
 
   for (const session of sessions.values()) {
-    if (session.key === key) return touchSession(session);
+    if (session.key === key) return session;
   }
 
   return null;
 }
 
-function sessionFromKeyOrId(url) {
+function hasValidMobileAuth(session, token) {
+  const safeToken = normalizeMobileAuthToken(token);
+  const auth = safeToken ? session.mobileAuthTokens.get(safeToken) : null;
+
+  if (!auth) return false;
+
+  if (Date.now() - auth.createdAt > MOBILE_AUTH_TTL_MS) {
+    session.mobileAuthTokens.delete(safeToken);
+    return false;
+  }
+
+  auth.lastSeen = Date.now();
+  return true;
+}
+
+function sessionFromKey(req, url, { requireAuth = false } = {}) {
+  const session = sessionByKey(url);
+  if (!session) return null;
+
+  if (requireAuth && !hasValidMobileAuth(session, mobileAuthTokenFromRequest(req, url))) {
+    return null;
+  }
+
+  return touchSession(session);
+}
+
+function sessionFromKeyOrId(req, url, { requireMobileAuth = false } = {}) {
   if (url.searchParams.has("key")) {
-    return sessionFromKey(url);
+    return sessionFromKey(req, url, { requireAuth: requireMobileAuth });
   }
 
   return getOrCreateSession(url.searchParams.get("session"));
@@ -130,6 +181,12 @@ function cleanupSessions() {
   const now = Date.now();
 
   for (const [id, session] of sessions) {
+    for (const [token, auth] of session.mobileAuthTokens) {
+      if (now - auth.createdAt > MOBILE_AUTH_TTL_MS) {
+        session.mobileAuthTokens.delete(token);
+      }
+    }
+
     if (session.activeTransfers.size > 0) continue;
     if (now - session.updatedAt > SESSION_TTL_MS) {
       for (const file of session.sharedFiles.values()) {
@@ -222,6 +279,7 @@ async function getConfig(req, session) {
 
   session.configCache = {
     sessionId: session.id,
+    pin: session.pin,
     appUrl: `http://localhost:${PORT}`,
     sendUrl,
     qrCode: await QRCode.toDataURL(sendUrl, {
@@ -360,10 +418,22 @@ function publicHistoryItem(item) {
   };
 }
 
+function publicMobilePresence(session) {
+  const clients = Array.from(session.mobileClients.values());
+  const firstClient = clients[0] || null;
+
+  return {
+    connected: clients.length > 0,
+    count: clients.length,
+    label: firstClient?.label || null
+  };
+}
+
 function publicState(session) {
   return {
     active: Array.from(session.activeTransfers.values()).map(formatPublicTransfer),
     history: session.history.slice(0, 12).map(publicHistoryItem),
+    mobile: publicMobilePresence(session),
     note: {
       text: session.noteText || "",
       updatedAt: session.noteUpdatedAt || session.createdAt
@@ -542,9 +612,15 @@ async function handleFolders(req, res, url) {
 }
 
 async function handleNote(req, res, url) {
-  const session = sessionFromKeyOrId(url);
+  const session = sessionFromKeyOrId(req, url, { requireMobileAuth: true });
   if (!session) {
-    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
+    const expired = url.searchParams.has("key") && !sessionByKey(url);
+    writeJson(res, 403, {
+      ok: false,
+      expired,
+      pinRequired: !expired && url.searchParams.has("key"),
+      error: expired ? EXPIRED_QR_MESSAGE : PIN_REQUIRED_MESSAGE
+    });
     req.resume();
     return;
   }
@@ -584,6 +660,128 @@ async function handleNote(req, res, url) {
   }
 }
 
+async function handlePinVerify(req, res, url) {
+  const session = sessionByKey(url);
+  if (!session) {
+    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
+    req.resume();
+    return;
+  }
+
+  if (req.method !== "POST") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    req.resume();
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(req);
+    const pin = String(body.pin || "").replace(/\D/g, "");
+
+    if (pin !== session.pin) {
+      writeJson(res, 403, { ok: false, error: "PIN incorreto. Confira o codigo no computador." });
+      return;
+    }
+
+    const auth = createMobileAuthToken();
+    session.mobileAuthTokens.set(auth, {
+      createdAt: Date.now(),
+      lastSeen: Date.now(),
+      label: deviceLabelFromUserAgent(req.headers["user-agent"])
+    });
+    touchSession(session);
+
+    writeJson(res, 200, {
+      ok: true,
+      auth,
+      note: publicState(session).note
+    });
+  } catch (error) {
+    writeJson(res, 400, {
+      ok: false,
+      error: error.message || "Nao foi possivel validar o PIN"
+    });
+  }
+}
+
+function handlePinStatus(req, res, url) {
+  const session = sessionByKey(url);
+  if (!session) {
+    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
+    req.resume();
+    return;
+  }
+
+  const verified = hasValidMobileAuth(session, mobileAuthTokenFromRequest(req, url));
+  writeJson(res, 200, {
+    ok: true,
+    verified,
+    note: verified ? publicState(session).note : null
+  });
+}
+
+async function handleSessionRenew(req, res, url) {
+  if (req.method !== "POST") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    req.resume();
+    return;
+  }
+
+  const session = getOrCreateSession(url.searchParams.get("session"));
+  renewSessionAccess(session);
+  const config = await getConfig(req, session);
+  broadcastState(session);
+
+  writeJson(res, 200, {
+    ok: true,
+    ...config,
+    state: publicState(session)
+  });
+}
+
+async function handleSessionEnd(req, res, url) {
+  if (req.method !== "POST") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    req.resume();
+    return;
+  }
+
+  const session = getOrCreateSession(url.searchParams.get("session"));
+  disconnectMobileClients(session, "Sessao encerrada no computador. Escaneie um novo QR Code.");
+  await clearSessionData(session, {
+    clearNote: true,
+    deleteReceivedFiles: isHostedEnvironment()
+  });
+  renewSessionAccess(session);
+  const config = await getConfig(req, session);
+  broadcastState(session);
+
+  writeJson(res, 200, {
+    ok: true,
+    ...config,
+    state: publicState(session)
+  });
+}
+
+async function handleHistoryClear(req, res, url) {
+  if (req.method !== "POST" && req.method !== "DELETE") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    req.resume();
+    return;
+  }
+
+  const session = getOrCreateSession(url.searchParams.get("session"));
+  await clearCompletedHistory(session, {
+    deleteReceivedFiles: isHostedEnvironment()
+  });
+  broadcastState(session);
+
+  writeJson(res, 200, {
+    ok: true,
+    state: publicState(session)
+  });
+}
+
 function sendSseState(res, session) {
   res.write(`event: state\ndata: ${JSON.stringify(publicState(session))}\n\n`);
 }
@@ -596,6 +794,129 @@ function broadcastState(session) {
       client.res.write(payload);
     }
   }
+}
+
+function broadcastEvent(session, eventName, payload, filter = () => true) {
+  const body = `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
+
+  for (const client of sseClients) {
+    if (client.sessionId === session.id && filter(client)) {
+      client.res.write(body);
+    }
+  }
+}
+
+function disconnectMobileClients(session, message) {
+  broadcastEvent(
+    session,
+    "expired",
+    { expired: true, error: message },
+    (client) => client.role === "mobile"
+  );
+
+  for (const client of Array.from(sseClients)) {
+    if (client.sessionId === session.id && client.role === "mobile") {
+      client.res.end();
+      sseClients.delete(client);
+    }
+  }
+
+  session.mobileClients.clear();
+}
+
+function deviceLabelFromUserAgent(userAgent) {
+  const ua = String(userAgent || "");
+  if (!ua) return "Aparelho conectado";
+
+  if (/iPhone/i.test(ua)) return "iPhone";
+  if (/iPad/i.test(ua)) return "iPad";
+
+  const androidMatch = ua.match(/Android [^;)]*;\s*([^;)]+?)(?:\s+Build|\)|;)/i);
+  if (androidMatch) {
+    const rawModel = androidMatch[1]
+      .replace(/\bwv\b/gi, "")
+      .replace(/\bMobile\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (rawModel && !/Chrome|Safari|Version|Linux/i.test(rawModel)) {
+      return rawModel.slice(0, 48);
+    }
+
+    return "Celular Android";
+  }
+
+  if (/Android/i.test(ua)) return "Celular Android";
+  if (/Mobile|Phone/i.test(ua)) return "Celular";
+  return "Aparelho conectado";
+}
+
+function renewSessionAccess(session) {
+  disconnectMobileClients(session, "QR Code renovado. Escaneie o novo codigo no computador.");
+  session.key = createSessionKey();
+  session.pin = createSessionPin();
+  session.mobileAuthTokens.clear();
+  session.configCache = null;
+  return touchSession(session);
+}
+
+function isHostedEnvironment() {
+  return Boolean(
+    process.env.RENDER ||
+      process.env.RENDER_SERVICE_ID ||
+      process.env.RENDER_EXTERNAL_URL ||
+      process.env.RENDER_GIT_COMMIT
+  );
+}
+
+async function removeSessionArtifacts(session, prefixKinds = ["upload", "share"]) {
+  const safeId = safeSessionId(session.id);
+  const prefixes = prefixKinds.map((kind) => `.${kind}-${safeId}-`);
+
+  let entries = [];
+  try {
+    entries = await fsp.readdir(uploadDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  await Promise.allSettled(
+    entries
+      .filter((entry) => prefixes.some((prefix) => entry.name.startsWith(prefix)))
+      .map((entry) => fsp.rm(path.join(uploadDir, entry.name), { force: true, recursive: entry.isDirectory() }))
+  );
+}
+
+async function clearCompletedHistory(session, { deleteReceivedFiles = false } = {}) {
+  const completed = Array.from(session.completedFiles.values());
+
+  if (deleteReceivedFiles) {
+    await Promise.allSettled(completed.map((file) => fsp.rm(file.targetPath, { force: true })));
+  }
+
+  session.completedFiles.clear();
+  session.history = [];
+  await removeSessionArtifacts(session, ["upload"]);
+  touchSession(session);
+}
+
+async function clearSessionData(session, { clearNote = false, deleteReceivedFiles = false } = {}) {
+  session.activeTransfers.clear();
+  await clearCompletedHistory(session, { deleteReceivedFiles });
+
+  await Promise.allSettled(
+    Array.from(session.sharedFiles.values()).map((file) => removeShareFiles(session, file.id, file.targetPath))
+  );
+  session.sharedFiles.clear();
+  session.shareBundles.clear();
+  await removeSessionArtifacts(session, ["share"]);
+
+  if (clearNote) {
+    session.noteText = "";
+    session.noteUpdatedAt = Date.now();
+  }
+
+  touchSession(session);
 }
 
 function serveText(res, status, text, contentType = "text/plain; charset=utf-8") {
@@ -991,17 +1312,24 @@ async function serveStatic(res, filePath) {
 }
 
 function validateKey(url) {
-  return Boolean(sessionFromKey(url));
+  return Boolean(sessionByKey(url));
 }
 
 function requireUploadSession(req, res, url, { json = true } = {}) {
-  const session = sessionFromKey(url);
-  if (session) return session;
+  const session = sessionByKey(url);
+  if (session && hasValidMobileAuth(session, mobileAuthTokenFromRequest(req, url))) {
+    return touchSession(session);
+  }
 
   if (json) {
-    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
+    writeJson(res, 403, {
+      ok: false,
+      expired: !session,
+      pinRequired: Boolean(session),
+      error: session ? PIN_REQUIRED_MESSAGE : EXPIRED_QR_MESSAGE
+    });
   } else {
-    serveText(res, 403, EXPIRED_QR_MESSAGE);
+    serveText(res, 403, session ? PIN_REQUIRED_MESSAGE : EXPIRED_QR_MESSAGE);
   }
   req.resume();
   return null;
@@ -2010,10 +2338,42 @@ async function route(req, res) {
     return;
   }
 
+  if (url.pathname === "/api/pin/verify") {
+    await handlePinVerify(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/api/pin/status") {
+    handlePinStatus(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/api/session/renew") {
+    await handleSessionRenew(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/api/session/end") {
+    await handleSessionEnd(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/api/history/clear") {
+    await handleHistoryClear(req, res, url);
+    return;
+  }
+
   if (url.pathname === "/events") {
-    const session = sessionFromKeyOrId(url);
+    const hasMobileKey = url.searchParams.has("key");
+    const session = sessionFromKeyOrId(req, url, { requireMobileAuth: true });
     if (!session) {
-      writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
+      const expired = hasMobileKey && !sessionByKey(url);
+      writeJson(res, 403, {
+        ok: false,
+        expired,
+        pinRequired: !expired && hasMobileKey,
+        error: expired ? EXPIRED_QR_MESSAGE : PIN_REQUIRED_MESSAGE
+      });
       return;
     }
     res.writeHead(200, {
@@ -2022,10 +2382,25 @@ async function route(req, res) {
       connection: "keep-alive",
       "x-accel-buffering": "no"
     });
-    const client = { res, sessionId: session.id };
+    const role = hasMobileKey ? "mobile" : "desktop";
+    const mobileClientId = role === "mobile" ? crypto.randomUUID() : null;
+    const client = { res, sessionId: session.id, role, mobileClientId };
     sseClients.add(client);
+    if (role === "mobile") {
+      session.mobileClients.set(mobileClientId, {
+        label: deviceLabelFromUserAgent(req.headers["user-agent"]),
+        connectedAt: Date.now()
+      });
+      broadcastState(session);
+    }
     sendSseState(res, session);
-    req.on("close", () => sseClients.delete(client));
+    req.on("close", () => {
+      sseClients.delete(client);
+      if (role === "mobile") {
+        session.mobileClients.delete(mobileClientId);
+        broadcastState(session);
+      }
+    });
     return;
   }
 

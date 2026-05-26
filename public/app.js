@@ -6,6 +6,12 @@ const qrNotice = document.querySelector("#qrNotice");
 const addressList = document.querySelector("#addressList");
 const connectionDot = document.querySelector("#connectionDot");
 const connectionText = document.querySelector("#connectionText");
+const mobileConnectionDot = document.querySelector("#mobileConnectionDot");
+const mobileConnectionText = document.querySelector("#mobileConnectionText");
+const themeToggle = document.querySelector("#themeToggle");
+const sessionPin = document.querySelector("#sessionPin");
+const renewQrButton = document.querySelector("#renewQrButton");
+const endSessionButton = document.querySelector("#endSessionButton");
 const currentTitle = document.querySelector("#currentTitle");
 const percentLabel = document.querySelector("#percentLabel");
 const progressFill = document.querySelector("#progressFill");
@@ -15,6 +21,7 @@ const etaMetric = document.querySelector("#etaMetric");
 const emptyState = document.querySelector("#emptyState");
 const historyList = document.querySelector("#historyList");
 const historyCount = document.querySelector("#historyCount");
+const clearHistoryButton = document.querySelector("#clearHistoryButton");
 const destinationBox = document.querySelector("#destinationBox");
 const currentDestination = document.querySelector("#currentDestination");
 const openFolderButton = document.querySelector("#openFolderButton");
@@ -29,6 +36,7 @@ const saveFolderButton = document.querySelector("#saveFolderButton");
 const shareFileInput = document.querySelector("#shareFileInput");
 const shareFolderInput = document.querySelector("#shareFolderInput");
 const shareFolderPicker = document.querySelector("#shareFolderPicker");
+const shareDropZone = document.querySelector("#shareDropZone");
 const shareFileName = document.querySelector("#shareFileName");
 const shareFolderName = document.querySelector("#shareFolderName");
 const sharePrepareButton = document.querySelector("#sharePrepareButton");
@@ -48,8 +56,10 @@ const shareLink = document.querySelector("#shareLink");
 const shareCopyButton = document.querySelector("#shareCopyButton");
 const sharedNote = document.querySelector("#sharedNote");
 const noteStatus = document.querySelector("#noteStatus");
+const noteCopyButton = document.querySelector("#noteCopyButton");
 
 const RECEIVER_SESSION_KEY = "transferenciaQrReceiverSession";
+const THEME_KEY = "transferenciaQrTheme";
 const SHARE_CHUNK_SIZE = 1024 * 1024;
 const SHARE_MAX_RETRIES = 3;
 
@@ -88,6 +98,30 @@ function getReceiverSessionId() {
   }
 }
 
+function preferredTheme() {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === "dark" || saved === "light") return saved;
+  } catch {
+    // Theme persistence is optional.
+  }
+
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyTheme(theme) {
+  const safeTheme = theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = safeTheme;
+  themeToggle.textContent = safeTheme === "dark" ? "Tema claro" : "Tema escuro";
+  themeToggle.setAttribute("aria-pressed", String(safeTheme === "dark"));
+
+  try {
+    localStorage.setItem(THEME_KEY, safeTheme);
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
 function sessionUrl(path) {
   const separator = path.includes("?") ? "&" : "?";
   return `${path}${separator}session=${encodeURIComponent(receiverSessionId)}`;
@@ -102,7 +136,7 @@ function createClientId() {
 }
 
 function fileDisplayName(file) {
-  return file.webkitRelativePath || file.name;
+  return file.relativePath || file.webkitRelativePath || file.name;
 }
 
 function formatBytes(bytes) {
@@ -128,7 +162,18 @@ function formatTime(seconds) {
 function setConnection(online) {
   connectionDot.classList.toggle("online", online);
   connectionDot.classList.toggle("offline", !online);
-  connectionText.textContent = online ? "Pronto para receber" : "Reconectando...";
+  connectionText.textContent = online ? "Servidor online" : "Servidor reconectando...";
+}
+
+function renderMobilePresence(mobile) {
+  const connected = Boolean(mobile?.connected);
+  const count = Number(mobile?.count || 0);
+  const label = String(mobile?.label || "").trim();
+  const suffix = label ? ` (${label})` : count > 1 ? ` (${count})` : "";
+
+  mobileConnectionDot.classList.toggle("online", connected);
+  mobileConnectionDot.classList.toggle("offline", !connected);
+  mobileConnectionText.textContent = connected ? `Celular conectado${suffix}` : "Celular desconectado";
 }
 
 function renderAddresses(addresses) {
@@ -154,12 +199,14 @@ function applyConfig(config, { notify = false } = {}) {
   currentSendUrl = config.sendUrl;
 
   if (shouldUpdateQr) {
+    qrLoader.classList.remove("hidden");
     qrImage.addEventListener("load", () => qrLoader.classList.add("hidden"), { once: true });
     qrImage.src = config.qrCode;
     if (qrImage.complete) qrLoader.classList.add("hidden");
   }
 
   sendLink.value = config.sendUrl;
+  sessionPin.textContent = config.pin || "------";
   renderAddresses(config.addresses || []);
 
   if (changed && notify) {
@@ -204,6 +251,7 @@ function renderProgress(transfer) {
 
 function renderHistory(items) {
   historyCount.textContent = String(items.length);
+  clearHistoryButton.disabled = items.length === 0;
   historyList.innerHTML = "";
 
   if (!items.length) {
@@ -215,6 +263,11 @@ function renderHistory(items) {
   }
 
   for (const item of items) {
+    const duration = Number(item.duration || 0);
+    const averageSpeed = duration > 0 ? Number(item.size || 0) / duration : 0;
+    const finishedMeta = duration > 0
+      ? `terminou em ${formatTime(duration)} · media ${formatBytes(averageSpeed)}/s`
+      : "concluido";
     const row = document.createElement("article");
     row.className = "history-item";
     row.innerHTML = `
@@ -233,7 +286,7 @@ function renderHistory(items) {
           ` : ""}
         </div>
       </header>
-      <span class="history-meta">${escapeHtml(item.location || "Disponivel para download")} · ${formatTime(item.duration)}</span>
+      <span class="history-meta">${escapeHtml(item.location || "Disponivel para download")} · ${escapeHtml(finishedMeta)}</span>
     `;
     historyList.append(row);
   }
@@ -319,6 +372,7 @@ function applyState(state) {
   const active = state.active.find((item) => item.status === "receiving") || state.active[0];
   renderProgress(active);
   renderHistory(state.history || []);
+  renderMobilePresence(state.mobile);
   renderSharedNote(state.note);
 }
 
@@ -708,6 +762,11 @@ async function prepareShareFiles() {
       const bundle = await createShareBundle(prepared.map((file) => file.id));
       renderShareResult(bundle);
     }
+
+    const duration = Math.max(0.001, (Date.now() - startedAt) / 1000);
+    const averageSpeed = totalSize / duration;
+    shareReceivedLabel.textContent = `${formatBytes(totalSize)} enviados`;
+    shareEtaLabel.textContent = `terminou em ${formatTime(duration)} · media ${formatBytes(averageSpeed)}/s`;
   } catch (error) {
     shareProgress.classList.remove("hidden");
     shareProgressTitle.textContent = shareStopRequested ? "Envio cancelado" : "Falha ao preparar arquivos";
@@ -739,6 +798,57 @@ async function checkQrCodeFreshness() {
   }
 }
 
+async function postSessionAction(path, button, successMessage) {
+  button.disabled = true;
+
+  try {
+    const response = await fetch(sessionUrl(path), { method: "POST" });
+    const data = await readJsonResponse(response);
+    applyConfig(data, { notify: true });
+    if (data.state) applyState(data.state);
+    if (successMessage) showQrNotice(successMessage);
+    return data;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function renewQrCode() {
+  await postSessionAction(
+    "/api/session/renew",
+    renewQrButton,
+    "QR Code renovado. O codigo antigo e o PIN antigo nao funcionam mais."
+  );
+}
+
+async function endSession() {
+  const confirmed = window.confirm("Encerrar esta sessao? O QR atual, PIN, links e lista de recebidos serao limpos.");
+  if (!confirmed) return;
+
+  shareResult.classList.add("hidden");
+  resetShareProgress();
+  await postSessionAction(
+    "/api/session/end",
+    endSessionButton,
+    "Sessao encerrada. Um novo QR Code e um novo PIN foram gerados."
+  );
+}
+
+async function clearHistory() {
+  const confirmed = window.confirm("Limpar a lista de recebidos desta sessao?");
+  if (!confirmed) return;
+
+  clearHistoryButton.disabled = true;
+
+  try {
+    const response = await fetch(sessionUrl("/api/history/clear"), { method: "POST" });
+    const data = await readJsonResponse(response);
+    if (data.state) applyState(data.state);
+  } finally {
+    clearHistoryButton.disabled = false;
+  }
+}
+
 function connectEvents() {
   const source = new EventSource(sessionUrl("/events"));
 
@@ -750,13 +860,19 @@ function connectEvents() {
   });
 }
 
-copyButton.addEventListener("click", async () => {
+async function copyTextToClipboard(text, fallbackInput = null) {
   try {
-    await navigator.clipboard.writeText(sendLink.value);
+    await navigator.clipboard.writeText(text);
   } catch {
-    sendLink.select();
-    document.execCommand("copy");
+    if (fallbackInput) {
+      fallbackInput.select();
+      document.execCommand("copy");
+    }
   }
+}
+
+copyButton.addEventListener("click", async () => {
+  await copyTextToClipboard(sendLink.value, sendLink);
 
   copyButton.title = "Copiado";
   setTimeout(() => {
@@ -765,8 +881,9 @@ copyButton.addEventListener("click", async () => {
 });
 
 function folderNameFromFiles(files) {
-  const firstPath = files.find((file) => file.webkitRelativePath)?.webkitRelativePath || "";
-  return firstPath.split("/")[0] || "";
+  const firstPath = files.find((file) => file.relativePath || file.webkitRelativePath);
+  const pathName = firstPath ? fileDisplayName(firstPath) : "";
+  return pathName.split("/")[0] || "";
 }
 
 function updateShareSelection(fileList, source, otherInput) {
@@ -795,12 +912,115 @@ function updateShareSelection(fileList, source, otherInput) {
   setShareControls(false);
 }
 
+function withRelativePath(file, relativePath) {
+  const cleanPath = String(relativePath || file.name).replace(/\\/g, "/").replace(/^\/+/, "");
+
+  try {
+    Object.defineProperty(file, "relativePath", {
+      value: cleanPath,
+      configurable: true
+    });
+  } catch {
+    file.relativePath = cleanPath;
+  }
+
+  return file;
+}
+
+function readEntryFile(entry, relativePath) {
+  return new Promise((resolve, reject) => {
+    entry.file(
+      (file) => resolve(withRelativePath(file, relativePath || entry.name)),
+      reject
+    );
+  });
+}
+
+function readDirectoryEntries(reader) {
+  return new Promise((resolve, reject) => {
+    reader.readEntries(resolve, reject);
+  });
+}
+
+async function collectEntryFiles(entry, basePath = "") {
+  const nextPath = basePath ? `${basePath}/${entry.name}` : entry.name;
+
+  if (entry.isFile) {
+    return [await readEntryFile(entry, nextPath)];
+  }
+
+  if (!entry.isDirectory) return [];
+
+  const reader = entry.createReader();
+  const files = [];
+
+  while (true) {
+    const entries = await readDirectoryEntries(reader);
+    if (!entries.length) break;
+
+    for (const child of entries) {
+      files.push(...(await collectEntryFiles(child, nextPath)));
+    }
+  }
+
+  return files;
+}
+
+async function collectDroppedFiles(dataTransfer) {
+  const items = Array.from(dataTransfer.items || []);
+  const entryItems = items
+    .map((item) => (typeof item.webkitGetAsEntry === "function" ? item.webkitGetAsEntry() : null))
+    .filter(Boolean);
+
+  if (!entryItems.length) {
+    return Array.from(dataTransfer.files || []);
+  }
+
+  const groups = await Promise.all(entryItems.map((entry) => collectEntryFiles(entry)));
+  return groups.flat();
+}
+
+async function handleShareDrop(event) {
+  event.preventDefault();
+  shareDropZone.classList.remove("drag-over");
+
+  if (sharePrepareButton.disabled && selectedShareFiles.length > 0) return;
+
+  const files = await collectDroppedFiles(event.dataTransfer);
+  updateShareSelection(files, "drop");
+  shareFileInput.value = "";
+  shareFolderInput.value = "";
+}
+
 shareFileInput.addEventListener("change", () => {
   updateShareSelection(shareFileInput.files, "files", shareFolderInput);
 });
 
 shareFolderInput.addEventListener("change", () => {
   updateShareSelection(shareFolderInput.files, "folder", shareFileInput);
+});
+
+shareDropZone.addEventListener("dragenter", (event) => {
+  event.preventDefault();
+  shareDropZone.classList.add("drag-over");
+});
+
+shareDropZone.addEventListener("dragover", (event) => {
+  event.preventDefault();
+  shareDropZone.classList.add("drag-over");
+});
+
+shareDropZone.addEventListener("dragleave", (event) => {
+  if (!shareDropZone.contains(event.relatedTarget)) {
+    shareDropZone.classList.remove("drag-over");
+  }
+});
+
+shareDropZone.addEventListener("drop", (event) => {
+  handleShareDrop(event).catch((error) => {
+    shareDropZone.classList.remove("drag-over");
+    shareEtaLabel.textContent = error.message || "nao foi possivel ler os arquivos";
+  });
 });
 
 sharePrepareButton.addEventListener("click", () => {
@@ -816,17 +1036,35 @@ shareCancelButton.addEventListener("click", () => {
 });
 
 shareCopyButton.addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText(shareLink.value);
-  } catch {
-    shareLink.select();
-    document.execCommand("copy");
-  }
+  await copyTextToClipboard(shareLink.value, shareLink);
 
   shareCopyButton.title = "Copiado";
   setTimeout(() => {
     shareCopyButton.title = "Copiar link";
   }, 1200);
+});
+
+noteCopyButton.addEventListener("click", async () => {
+  await copyTextToClipboard(sharedNote.value, sharedNote);
+  setNoteStatus("Texto copiado");
+  setTimeout(() => setNoteStatus("Sincronizado"), 1200);
+});
+
+themeToggle.addEventListener("click", () => {
+  const currentTheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  applyTheme(currentTheme === "dark" ? "light" : "dark");
+});
+
+renewQrButton.addEventListener("click", () => {
+  renewQrCode().catch((error) => showQrNotice(error.message || "Nao foi possivel renovar o QR Code"));
+});
+
+endSessionButton.addEventListener("click", () => {
+  endSession().catch((error) => showQrNotice(error.message || "Nao foi possivel encerrar a sessao"));
+});
+
+clearHistoryButton.addEventListener("click", () => {
+  clearHistory().catch((error) => showQrNotice(error.message || "Nao foi possivel limpar o historico"));
 });
 
 sharedNote.addEventListener("input", scheduleNoteSave);
@@ -854,6 +1092,7 @@ folderPathInput.addEventListener("keydown", (event) => {
 });
 saveFolderButton.addEventListener("click", saveDestination);
 
+applyTheme(preferredTheme());
 loadConfig().catch(() => {
   qrLoader.textContent = "Nao foi possivel gerar o QR Code";
 });

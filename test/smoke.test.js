@@ -77,6 +77,25 @@ async function getSendKey() {
   return new URL(config.sendUrl).searchParams.get("key");
 }
 
+async function getSendCredentials() {
+  const configResponse = await fetch(`${baseUrl}/api/config`);
+  const config = await configResponse.json();
+  const key = new URL(config.sendUrl).searchParams.get("key");
+
+  const verify = await fetch(`${baseUrl}/api/pin/verify?key=${key}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ pin: config.pin })
+  });
+  assert.equal(verify.status, 200);
+
+  const verified = await verify.json();
+  assert.equal(verified.ok, true);
+  assert.equal(typeof verified.auth, "string");
+
+  return { key, auth: verified.auth, sessionId: config.sessionId, pin: config.pin };
+}
+
 test("GET / serves the desktop page", async () => {
   const response = await fetch(`${baseUrl}/`);
   assert.equal(response.status, 200);
@@ -93,6 +112,7 @@ test("GET /api/config returns QR and send URL", async () => {
 
   const config = await response.json();
   assert.equal(typeof config.sendUrl, "string");
+  assert.match(config.pin, /^\d{6}$/);
   assert.match(config.sendUrl, /\/send\?key=/);
   assert.match(config.qrCode, /^data:image\/png;base64,/);
 });
@@ -124,13 +144,43 @@ test("GET /send without key shows expired page", async () => {
   assert.match(body, /expirado|expirada/i);
 });
 
-test("shared note syncs between phone key and desktop session", async () => {
+test("phone PIN unlocks mobile APIs", async () => {
   const configResponse = await fetch(`${baseUrl}/api/config`);
   const config = await configResponse.json();
   const key = new URL(config.sendUrl).searchParams.get("key");
+
+  const blocked = await fetch(`${baseUrl}/api/note?key=${key}`);
+  assert.equal(blocked.status, 403);
+  const blockedData = await blocked.json();
+  assert.equal(blockedData.pinRequired, true);
+
+  const wrong = await fetch(`${baseUrl}/api/pin/verify?key=${key}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ pin: "000000" })
+  });
+  assert.equal(wrong.status, config.pin === "000000" ? 200 : 403);
+
+  const verify = await fetch(`${baseUrl}/api/pin/verify?key=${key}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ pin: config.pin })
+  });
+  assert.equal(verify.status, 200);
+  const verified = await verify.json();
+  assert.equal(typeof verified.auth, "string");
+
+  const status = await fetch(`${baseUrl}/api/pin/status?key=${key}&auth=${verified.auth}`);
+  assert.equal(status.status, 200);
+  const statusData = await status.json();
+  assert.equal(statusData.verified, true);
+});
+
+test("shared note syncs between phone key and desktop session", async () => {
+  const { key, auth, sessionId } = await getSendCredentials();
   const text = `nota compartilhada ${Date.now()}`;
 
-  const save = await fetch(`${baseUrl}/api/note?key=${key}`, {
+  const save = await fetch(`${baseUrl}/api/note?key=${key}&auth=${auth}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ text })
@@ -139,33 +189,47 @@ test("shared note syncs between phone key and desktop session", async () => {
   const saved = await save.json();
   assert.equal(saved.note.text, text);
 
-  const read = await fetch(`${baseUrl}/api/note?session=${config.sessionId}`);
+  const read = await fetch(`${baseUrl}/api/note?session=${sessionId}`);
   assert.equal(read.status, 200);
   const data = await read.json();
   assert.equal(data.note.text, text);
 });
 
+test("desktop can renew QR and invalidate old phone access", async () => {
+  const { key, auth, sessionId } = await getSendCredentials();
+
+  const renew = await fetch(`${baseUrl}/api/session/renew?session=${sessionId}`, { method: "POST" });
+  assert.equal(renew.status, 200);
+  const renewed = await renew.json();
+  assert.equal(renewed.ok, true);
+  assert.notEqual(new URL(renewed.sendUrl).searchParams.get("key"), key);
+  assert.match(renewed.pin, /^\d{6}$/);
+
+  const oldStatus = await fetch(`${baseUrl}/api/pin/status?key=${key}&auth=${auth}`);
+  assert.equal(oldStatus.status, 403);
+});
+
 test("phone upload preserves folder path in saved name", async () => {
-  const key = await getSendKey();
+  const { key, auth } = await getSendCredentials();
   const id = `folder-upload-${Date.now()}`;
   const fileName = `pasta-teste-${Date.now()}/sub/arquivo.txt`;
   const body = Buffer.from("conteudo com pasta");
 
-  const start = await fetch(`${baseUrl}/upload/start?key=${key}`, {
+  const start = await fetch(`${baseUrl}/upload/start?key=${key}&auth=${auth}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ id, fileName, size: body.length })
   });
   assert.equal(start.status, 200);
 
-  const chunk = await fetch(`${baseUrl}/upload/chunk?key=${key}&id=${id}&offset=0`, {
+  const chunk = await fetch(`${baseUrl}/upload/chunk?key=${key}&auth=${auth}&id=${id}&offset=0`, {
     method: "POST",
     headers: { "content-type": "application/octet-stream" },
     body
   });
   assert.equal(chunk.status, 200);
 
-  const finish = await fetch(`${baseUrl}/upload/finish?key=${key}`, {
+  const finish = await fetch(`${baseUrl}/upload/finish?key=${key}&auth=${auth}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ id })
@@ -179,6 +243,43 @@ test("phone upload preserves folder path in saved name", async () => {
   const download = await fetch(`${baseUrl}${finished.downloadUrl}`);
   assert.equal(download.status, 200);
   assert.equal(await download.text(), body.toString());
+});
+
+test("desktop can clear received history and old download links", async () => {
+  const { key, auth, sessionId } = await getSendCredentials();
+  const id = `clear-history-${Date.now()}`;
+  const fileName = `limpar-${Date.now()}.txt`;
+  const body = Buffer.from("arquivo para limpar historico");
+
+  await fetch(`${baseUrl}/upload/start?key=${key}&auth=${auth}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, fileName, size: body.length })
+  });
+  await fetch(`${baseUrl}/upload/chunk?key=${key}&auth=${auth}&id=${id}&offset=0`, {
+    method: "POST",
+    headers: { "content-type": "application/octet-stream" },
+    body
+  });
+  const finish = await fetch(`${baseUrl}/upload/finish?key=${key}&auth=${auth}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id })
+  });
+  assert.equal(finish.status, 200);
+  const finished = await finish.json();
+  assert.match(finished.downloadUrl, /\/download\?/);
+
+  const stateBefore = await fetch(`${baseUrl}/api/state?session=${sessionId}`);
+  assert.equal((await stateBefore.json()).history.length, 1);
+
+  const clear = await fetch(`${baseUrl}/api/history/clear?session=${sessionId}`, { method: "POST" });
+  assert.equal(clear.status, 200);
+  const cleared = await clear.json();
+  assert.equal(cleared.state.history.length, 0);
+
+  const download = await fetch(`${baseUrl}${finished.downloadUrl}`);
+  assert.equal(download.status, 404);
 });
 
 async function preparePcShareFile(session, id, fileName, body) {

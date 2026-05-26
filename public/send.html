@@ -10,12 +10,24 @@
   <body class="mobile">
     <main class="phone-shell">
       <section class="phone-hero">
-        <p class="eyebrow">Conectado</p>
+        <p class="eyebrow" id="phoneConnectionLabel">Aguardando PIN</p>
         <h1>Enviar arquivos</h1>
         <p class="lede">Mantenha esta tela aberta. Se recarregar, selecione o mesmo arquivo para continuar.</p>
+        <button id="themeToggle" type="button" class="theme-toggle mobile-theme-toggle" aria-pressed="false">Tema escuro</button>
       </section>
 
-      <section class="send-panel">
+      <section class="send-panel pin-panel" id="pinPanel">
+        <p class="eyebrow">Seguranca</p>
+        <h2>Digite o PIN</h2>
+        <p>Veja o codigo mostrado no computador para liberar este celular.</p>
+        <div class="pin-entry">
+          <input id="pinInput" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" aria-label="PIN de seguranca">
+          <button id="pinButton" type="button" class="primary-button">Entrar</button>
+        </div>
+        <p class="pin-message" id="pinMessage" role="alert"></p>
+      </section>
+
+      <section class="send-panel" id="transferPanel" hidden>
         <div class="picker-grid">
           <label class="file-picker">
             <input id="fileInput" type="file" multiple>
@@ -65,13 +77,16 @@
         <div class="queue" id="queue"></div>
       </section>
 
-      <section class="send-panel note-panel" aria-labelledby="mobileNoteTitle">
+      <section class="send-panel note-panel" id="mobileNotePanel" aria-labelledby="mobileNoteTitle" hidden>
         <div class="panel-heading">
           <div>
             <p class="eyebrow">Texto compartilhado</p>
             <h2 id="mobileNoteTitle">Bloco de notas</h2>
           </div>
-          <span id="noteStatus" class="note-status">Sincronizado</span>
+          <div class="note-actions">
+            <span id="noteStatus" class="note-status">Sincronizado</span>
+            <button id="noteCopyButton" type="button" class="secondary-button compact-button">Copiar texto</button>
+          </div>
         </div>
         <textarea id="sharedNote" class="shared-note" rows="8" maxlength="20000" placeholder="Digite aqui para aparecer no computador..."></textarea>
       </section>

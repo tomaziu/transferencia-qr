@@ -5,6 +5,23 @@ Todas as mudanças importantes deste projeto serão documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 e este projeto adota [Versionamento Semântico](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-05-26
+
+### Adicionado
+
+- PIN de segurança por sessão antes de liberar a tela do celular.
+- Botões para renovar o QR Code, encerrar sessão e limpar histórico.
+- Aviso de celular conectado/desconectado no painel do computador.
+- Botão para copiar o texto do bloco de notas no computador e no celular.
+- Arrastar e soltar arquivos ou pastas na área de envio do PC para o celular.
+- Tema claro/escuro com preferência salva no navegador.
+- Tempo total e velocidade média ao concluir envios.
+
+### Melhorado
+
+- Rotas de upload, bloco de notas e eventos do celular agora exigem token validado pelo PIN.
+- Testes de fumaça cobrem PIN, renovação de QR e limpeza de histórico.
+
 ## [1.1.0] - 2026-05-26
 
 ### Adicionado

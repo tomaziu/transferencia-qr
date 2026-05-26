@@ -1,3 +1,10 @@
+const phoneConnectionLabel = document.querySelector("#phoneConnectionLabel");
+const themeToggle = document.querySelector("#themeToggle");
+const pinPanel = document.querySelector("#pinPanel");
+const pinInput = document.querySelector("#pinInput");
+const pinButton = document.querySelector("#pinButton");
+const pinMessage = document.querySelector("#pinMessage");
+const transferPanel = document.querySelector("#transferPanel");
 const fileInput = document.querySelector("#fileInput");
 const folderInput = document.querySelector("#folderInput");
 const folderPicker = document.querySelector("#folderPicker");
@@ -15,14 +22,18 @@ const resumeAdvice = document.querySelector("#resumeAdvice");
 const resumeAdviceTitle = document.querySelector("#resumeAdviceTitle");
 const resumeAdviceText = document.querySelector("#resumeAdviceText");
 const discardResumeButton = document.querySelector("#discardResumeButton");
+const mobileNotePanel = document.querySelector("#mobileNotePanel");
 const sharedNote = document.querySelector("#sharedNote");
 const noteStatus = document.querySelector("#noteStatus");
+const noteCopyButton = document.querySelector("#noteCopyButton");
 const key = new URLSearchParams(window.location.search).get("key") || "";
 
 const DEFAULT_CHUNK_SIZE = 1024 * 1024;
 const MAX_CHUNK_RETRIES = 3;
 const ONE_GB = 1024 * 1024 * 1024;
 const PENDING_UPLOADS_KEY = `transferenciaQrPendingUploads:${key.slice(0, 16) || "default"}`;
+const AUTH_STORAGE_KEY = `transferenciaQrMobileAuth:${key.slice(0, 16) || "default"}`;
+const THEME_KEY = "transferenciaQrTheme";
 
 let selectedFiles = [];
 let sending = false;
@@ -32,6 +43,8 @@ let activeChunkRequest = null;
 let stopRequested = false;
 let latestNoteUpdatedAt = 0;
 let noteSaveTimer = null;
+let mobileAuthToken = "";
+let noteEventSource = null;
 
 function createId() {
   if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
@@ -39,6 +52,59 @@ function createId() {
   }
 
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function preferredTheme() {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === "dark" || saved === "light") return saved;
+  } catch {
+    // Theme persistence is optional.
+  }
+
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyTheme(theme) {
+  const safeTheme = theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = safeTheme;
+  themeToggle.textContent = safeTheme === "dark" ? "Tema claro" : "Tema escuro";
+  themeToggle.setAttribute("aria-pressed", String(safeTheme === "dark"));
+
+  try {
+    localStorage.setItem(THEME_KEY, safeTheme);
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+function loadMobileAuthToken() {
+  try {
+    return sessionStorage.getItem(AUTH_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveMobileAuthToken(token) {
+  mobileAuthToken = token || "";
+
+  try {
+    if (mobileAuthToken) {
+      sessionStorage.setItem(AUTH_STORAGE_KEY, mobileAuthToken);
+    } else {
+      sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+  } catch {
+    // The token still works in memory for this tab.
+  }
+}
+
+function authenticatedUrl(path) {
+  const url = new URL(path, window.location.origin);
+  url.searchParams.set("key", key);
+  if (mobileAuthToken) url.searchParams.set("auth", mobileAuthToken);
+  return `${url.pathname}${url.search}`;
 }
 
 async function createFileId(file) {
@@ -156,14 +222,23 @@ async function saveSharedNote() {
   setNoteStatus("Salvando...");
 
   try {
-    const response = await fetch(`/api/note?key=${encodeURIComponent(key)}`, {
+    const response = await fetch(authenticatedUrl("/api/note"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ text })
     });
     const data = await readJsonResponse(response);
     renderSharedNote(data.note);
-  } catch {
+  } catch (error) {
+    if (error.expired) {
+      showExpiredSession(error.message);
+      return;
+    }
+    if (error.pinRequired) {
+      saveMobileAuthToken("");
+      showPinPanel(error.message);
+      return;
+    }
     setNoteStatus("Falha ao salvar");
   }
 }
@@ -174,13 +249,113 @@ function scheduleNoteSave() {
   noteSaveTimer = setTimeout(saveSharedNote, 450);
 }
 
+function showPinPanel(message = "") {
+  phoneConnectionLabel.textContent = "Aguardando PIN";
+  pinPanel.hidden = false;
+  transferPanel.hidden = true;
+  mobileNotePanel.hidden = true;
+  pinInput.disabled = false;
+  pinButton.disabled = false;
+  pinMessage.textContent = message;
+  pinInput.focus();
+}
+
+function showExpiredSession(message) {
+  saveMobileAuthToken("");
+  phoneConnectionLabel.textContent = "Sessao expirada";
+  pinPanel.hidden = false;
+  transferPanel.hidden = true;
+  mobileNotePanel.hidden = true;
+  pinInput.disabled = true;
+  pinButton.disabled = true;
+  pinMessage.textContent = message || "Sessao expirada. Escaneie o novo QR Code no computador.";
+
+  if (noteEventSource) {
+    noteEventSource.close();
+    noteEventSource = null;
+  }
+}
+
+function showTransferUi(note = null) {
+  phoneConnectionLabel.textContent = "Conectado";
+  pinPanel.hidden = true;
+  transferPanel.hidden = false;
+  mobileNotePanel.hidden = false;
+  if (note) renderSharedNote(note);
+  renderPendingNotice();
+  renderUploadControls();
+  updateQueueSummary();
+  connectNoteEvents();
+}
+
+async function verifyPin() {
+  const pin = pinInput.value.replace(/\D/g, "");
+  if (pin.length !== 6) {
+    pinMessage.textContent = "Digite os 6 numeros do PIN.";
+    return;
+  }
+
+  pinButton.disabled = true;
+  pinMessage.textContent = "Validando...";
+
+  try {
+    const response = await fetch(`/api/pin/verify?key=${encodeURIComponent(key)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pin })
+    });
+    const data = await readJsonResponse(response);
+    saveMobileAuthToken(data.auth);
+    showTransferUi(data.note);
+  } catch (error) {
+    if (error.expired) {
+      showExpiredSession(error.message);
+      return;
+    }
+
+    pinMessage.textContent = error.message || "PIN incorreto.";
+    pinButton.disabled = false;
+  }
+}
+
+async function verifyStoredAuth() {
+  mobileAuthToken = loadMobileAuthToken();
+  if (!mobileAuthToken) return false;
+
+  try {
+    const response = await fetch(authenticatedUrl("/api/pin/status"), { cache: "no-store" });
+    const data = await readJsonResponse(response);
+    if (!data.verified) {
+      saveMobileAuthToken("");
+      return false;
+    }
+
+    showTransferUi(data.note);
+    return true;
+  } catch (error) {
+    if (error.expired) {
+      showExpiredSession(error.message);
+      return true;
+    }
+    saveMobileAuthToken("");
+    return false;
+  }
+}
+
 function connectNoteEvents() {
-  const source = new EventSource(`/events?key=${encodeURIComponent(key)}`);
+  if (noteEventSource) noteEventSource.close();
+
+  const source = new EventSource(authenticatedUrl("/events"));
+  noteEventSource = source;
 
   source.addEventListener("open", () => setNoteStatus("Sincronizado"));
   source.addEventListener("error", () => setNoteStatus("Reconectando..."));
   source.addEventListener("state", (event) => {
     renderSharedNote(JSON.parse(event.data).note);
+  });
+  source.addEventListener("expired", (event) => {
+    const data = JSON.parse(event.data || "{}");
+    showExpiredSession(data.error);
   });
 }
 
@@ -397,6 +572,8 @@ async function readJsonResponse(response) {
   if (!response.ok || data.ok === false) {
     const error = new Error(data.error || "Falha no envio");
     error.received = data.received;
+    error.expired = Boolean(data.expired);
+    error.pinRequired = Boolean(data.pinRequired);
     throw error;
   }
 
@@ -404,7 +581,7 @@ async function readJsonResponse(response) {
 }
 
 async function startUpload(fileInfo) {
-  const response = await fetch(`/upload/start?key=${encodeURIComponent(key)}`, {
+  const response = await fetch(authenticatedUrl("/upload/start"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -418,12 +595,12 @@ async function startUpload(fileInfo) {
 }
 
 async function requestStatus(fileInfo) {
-  const response = await fetch(`/upload/status?key=${encodeURIComponent(key)}&id=${encodeURIComponent(fileInfo.id)}`);
+  const response = await fetch(authenticatedUrl(`/upload/status?id=${encodeURIComponent(fileInfo.id)}`));
   return readJsonResponse(response);
 }
 
 async function finishUpload(fileInfo) {
-  const response = await fetch(`/upload/finish?key=${encodeURIComponent(key)}`, {
+  const response = await fetch(authenticatedUrl("/upload/finish"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ id: fileInfo.id })
@@ -435,7 +612,7 @@ async function finishUpload(fileInfo) {
 async function cancelUploadOnServer(id) {
   if (!id) return;
 
-  await fetch(`/upload/cancel?key=${encodeURIComponent(key)}`, {
+  await fetch(authenticatedUrl("/upload/cancel"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ id })
@@ -511,7 +688,7 @@ function uploadChunk(fileInfo, offset, chunk, startedAt, baseOffset) {
 
     xhr.open(
       "POST",
-      `/upload/chunk?key=${encodeURIComponent(key)}&id=${encodeURIComponent(fileInfo.id)}&offset=${encodeURIComponent(offset)}`
+      authenticatedUrl(`/upload/chunk?id=${encodeURIComponent(fileInfo.id)}&offset=${encodeURIComponent(offset)}`)
     );
     xhr.setRequestHeader("content-type", "application/octet-stream");
 
@@ -646,12 +823,14 @@ async function uploadFile(fileInfo) {
 
   if (stopRequested) throw createStoppedError();
 
-  await finishUpload(fileInfo);
+  const finished = await finishUpload(fileInfo);
+  const duration = Number(finished.duration || 0);
+  const averageSpeed = duration > 0 ? fileInfo.size / duration : 0;
   forgetPendingUpload(fileInfo.id);
   updateItem(fileInfo.id, {
     percent: 100,
-    status: "Enviado",
-    eta: "concluido",
+    status: duration > 0 ? `Enviado · media ${formatBytes(averageSpeed)}/s` : "Enviado",
+    eta: duration > 0 ? `terminou em ${formatTime(duration)}` : "concluido",
     className: "done",
     fileStatus: "done"
   });
@@ -708,6 +887,12 @@ sendButton.addEventListener("click", async () => {
     try {
       await uploadFile(fileInfo);
     } catch (error) {
+      if (error.expired) {
+        showExpiredSession(error.message);
+      } else if (error.pinRequired) {
+        saveMobileAuthToken("");
+        showPinPanel(error.message);
+      }
       if (error.stopped || stopRequested) {
         await cancelStoppedFile(fileInfo);
       }
@@ -741,17 +926,52 @@ discardResumeButton.addEventListener("click", () => {
   cancelSavedUpload(resumeAdvice.dataset.pendingId);
 });
 
+pinInput.addEventListener("input", () => {
+  pinInput.value = pinInput.value.replace(/\D/g, "").slice(0, 6);
+  pinMessage.textContent = "";
+});
+
+pinInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") verifyPin();
+});
+
+pinButton.addEventListener("click", verifyPin);
+
+themeToggle.addEventListener("click", () => {
+  const currentTheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  applyTheme(currentTheme === "dark" ? "light" : "dark");
+});
+
+noteCopyButton.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(sharedNote.value);
+  } catch {
+    sharedNote.select();
+    document.execCommand("copy");
+  }
+
+  setNoteStatus("Texto copiado");
+  setTimeout(() => setNoteStatus("Sincronizado"), 1200);
+});
+
 sharedNote.addEventListener("input", scheduleNoteSave);
 sharedNote.addEventListener("blur", () => {
   clearTimeout(noteSaveTimer);
   saveSharedNote();
 });
 
-renderPendingNotice();
-renderUploadControls();
-connectNoteEvents();
-
 if (!("webkitdirectory" in folderInput)) {
   folderPicker.classList.add("hidden");
 }
-updateQueueSummary();
+
+async function init() {
+  applyTheme(preferredTheme());
+  renderPendingNotice();
+  renderUploadControls();
+  updateQueueSummary();
+
+  const restored = await verifyStoredAuth();
+  if (!restored && !pinInput.disabled) showPinPanel();
+}
+
+init();
