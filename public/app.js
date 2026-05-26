@@ -13,6 +13,8 @@ const mobileConnectionText = document.querySelector("#mobileConnectionText");
 const themeToggle = document.querySelector("#themeToggle");
 const sessionPin = document.querySelector("#sessionPin");
 const pinVisibilityButton = document.querySelector("#pinVisibilityButton");
+const pinToggleButton = document.querySelector("#pinToggleButton");
+const pinBox = document.querySelector("#pinBox");
 const renewQrButton = document.querySelector("#renewQrButton");
 const endSessionButton = document.querySelector("#endSessionButton");
 const currentTitle = document.querySelector("#currentTitle");
@@ -78,6 +80,7 @@ let latestNoteUpdatedAt = 0;
 let noteSaveTimer = null;
 let currentSessionPin = "";
 let pinVisible = false;
+let pinEnabled = true;
 const receiverSessionId = getReceiverSessionId();
 
 function createReceiverSessionId() {
@@ -204,10 +207,21 @@ function hideQrNotice() {
 }
 
 function renderSessionPin() {
-  sessionPin.textContent = pinVisible && currentSessionPin ? currentSessionPin : "******";
-  pinVisibilityButton.setAttribute("aria-pressed", String(pinVisible));
-  pinVisibilityButton.title = pinVisible ? "Esconder PIN" : "Mostrar PIN";
-  pinVisibilityButton.setAttribute("aria-label", pinVisible ? "Esconder PIN" : "Mostrar PIN");
+  const pinLabel = pinBox.querySelector("span");
+  const pinHidden = !pinEnabled || !currentSessionPin;
+  sessionPin.textContent = pinHidden ? (pinEnabled ? "******" : "---") : (pinVisible ? currentSessionPin : "******");
+  sessionPin.style.opacity = pinEnabled ? "1" : "0.4";
+  pinVisibilityButton.hidden = !pinEnabled;
+  pinToggleButton.textContent = pinEnabled ? "Desligar PIN" : "Ligar PIN";
+  pinToggleButton.classList.toggle("danger-button", pinEnabled);
+  if (pinLabel) pinLabel.textContent = pinEnabled ? "PIN de seguranca" : "PIN desligado";
+  if (pinEnabled) {
+    pinBox.style.borderColor = "";
+    pinBox.style.background = "";
+  } else {
+    pinBox.style.borderColor = "rgba(15, 143, 134, 0.28)";
+    pinBox.style.background = "rgba(15, 143, 134, 0.06)";
+  }
 }
 
 function setSessionPin(pin) {
@@ -231,6 +245,7 @@ function applyConfig(config, { notify = false } = {}) {
   }
 
   sendLink.value = config.sendUrl;
+  pinEnabled = config.pinEnabled !== false;
   setSessionPin(config.pin);
   renderAddresses(config.addresses || []);
 
@@ -1085,6 +1100,29 @@ themeToggle.addEventListener("click", () => {
 pinVisibilityButton.addEventListener("click", () => {
   pinVisible = !pinVisible;
   renderSessionPin();
+});
+
+pinToggleButton.addEventListener("click", async () => {
+  pinToggleButton.disabled = true;
+  try {
+    const response = await fetch(sessionUrl("/api/pin/toggle"), { method: "POST" });
+    const data = await readJsonResponse(response);
+    pinEnabled = data.pinEnabled !== false;
+    sendLink.value = data.sendUrl;
+    setSessionPin(data.pin);
+    renderAddresses(data.addresses || []);
+    if (data.qrCode) {
+      qrLoader.classList.remove("hidden");
+      qrImage.addEventListener("load", () => qrLoader.classList.add("hidden"), { once: true });
+      qrImage.src = data.qrCode;
+      if (qrImage.complete) qrLoader.classList.add("hidden");
+    }
+    if (data.state) applyState(data.state);
+  } catch (error) {
+    showQrNotice(error.message || "Nao foi possivel alterar o PIN");
+  } finally {
+    pinToggleButton.disabled = false;
+  }
 });
 
 renewQrButton.addEventListener("click", () => {

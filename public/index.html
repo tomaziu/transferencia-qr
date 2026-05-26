@@ -43,9 +43,9 @@
             </button>
           </div>
 
-          <div class="pin-box" aria-live="polite">
+          <div class="pin-box" id="pinBox" aria-live="polite">
             <span>PIN de seguranca</span>
-            <div class="pin-value-row">
+            <div class="pin-value-row" id="pinValueRow">
               <strong id="sessionPin">******</strong>
               <button id="pinVisibilityButton" type="button" class="pin-eye-button" title="Mostrar PIN" aria-label="Mostrar PIN" aria-pressed="false">
                 <svg class="eye-open" viewBox="0 0 24 24" aria-hidden="true">
@@ -59,6 +59,7 @@
                   <path d="M6.7 6.7C3.7 8.6 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 4.3-1"></path>
                 </svg>
               </button>
+              <button id="pinToggleButton" type="button" class="secondary-button compact-button pin-toggle-btn" title="Ativar ou desativar exigencia do PIN" data-tooltip="Quando desligado, o celular conecta sem precisar digitar o PIN.">Desligar PIN</button>
             </div>
           </div>
 

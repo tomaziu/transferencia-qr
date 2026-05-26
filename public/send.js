@@ -318,6 +318,26 @@ async function verifyPin() {
   }
 }
 
+async function tryAutoAuth() {
+  try {
+    const response = await fetch(`/api/pin/verify?key=${encodeURIComponent(key)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}"
+    });
+    const data = await readJsonResponse(response);
+    saveMobileAuthToken(data.auth);
+    showTransferUi(data.note);
+    return true;
+  } catch (error) {
+    if (error.expired) {
+      showExpiredSession(error.message);
+      return true;
+    }
+    return false;
+  }
+}
+
 async function verifyStoredAuth() {
   mobileAuthToken = loadMobileAuthToken();
   if (!mobileAuthToken) return false;
@@ -971,7 +991,10 @@ async function init() {
   updateQueueSummary();
 
   const restored = await verifyStoredAuth();
-  if (!restored && !pinInput.disabled) showPinPanel();
+  if (!restored && !pinInput.disabled) {
+    const auto = await tryAutoAuth();
+    if (!auto) showPinPanel();
+  }
 }
 
 init();

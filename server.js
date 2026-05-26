@@ -100,6 +100,7 @@ function createSession(id = createSessionId()) {
     noteUpdatedAt: Date.now(),
     history: [],
     configCache: null,
+    pinEnabled: true,
     createdAt: Date.now(),
     updatedAt: Date.now()
   };
@@ -280,6 +281,7 @@ async function getConfig(req, session) {
   session.configCache = {
     sessionId: session.id,
     pin: session.pin,
+    pinEnabled: session.pinEnabled,
     appUrl: `http://localhost:${PORT}`,
     sendUrl,
     qrCode: await QRCode.toDataURL(sendUrl, {
@@ -675,6 +677,18 @@ async function handlePinVerify(req, res, url) {
   }
 
   try {
+    if (!session.pinEnabled) {
+      const auth = createMobileAuthToken();
+      session.mobileAuthTokens.set(auth, {
+        createdAt: Date.now(),
+        lastSeen: Date.now(),
+        label: deviceLabelFromUserAgent(req.headers["user-agent"])
+      });
+      touchSession(session);
+      writeJson(res, 200, { ok: true, auth, pinEnabled: false, note: publicState(session).note });
+      return;
+    }
+
     const body = await readJsonBody(req);
     const pin = String(body.pin || "").replace(/\D/g, "");
 
@@ -716,6 +730,7 @@ function handlePinStatus(req, res, url) {
   writeJson(res, 200, {
     ok: true,
     verified,
+    pinEnabled: session.pinEnabled,
     note: verified ? publicState(session).note : null
   });
 }
@@ -849,6 +864,34 @@ function deviceLabelFromUserAgent(userAgent) {
   if (/Android/i.test(ua)) return "Celular Android";
   if (/Mobile|Phone/i.test(ua)) return "Celular";
   return "Aparelho conectado";
+}
+
+async function handlePinToggle(req, res, url) {
+  if (!requireLocalRequest(req, res)) return;
+
+  if (req.method !== "POST") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    req.resume();
+    return;
+  }
+
+  const session = getOrCreateSession(url.searchParams.get("session"));
+  session.pinEnabled = !session.pinEnabled;
+  session.configCache = null;
+  touchSession(session);
+
+  if (session.pinEnabled) {
+    renewSessionAccess(session);
+  }
+
+  const config = await getConfig(req, session);
+  broadcastState(session);
+
+  writeJson(res, 200, {
+    ok: true,
+    ...config,
+    state: publicState(session)
+  });
 }
 
 function renewSessionAccess(session) {
@@ -2312,7 +2355,8 @@ async function route(req, res) {
     writeJson(res, 200, {
       ...config,
       addresses: isLocal ? config.addresses : [],
-      canChooseDestination: isLocal
+      canChooseDestination: isLocal,
+      pinEnabled: session.pinEnabled
     });
     return;
   }
@@ -2345,6 +2389,11 @@ async function route(req, res) {
 
   if (url.pathname === "/api/pin/status") {
     handlePinStatus(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/api/pin/toggle") {
+    await handlePinToggle(req, res, url);
     return;
   }
 

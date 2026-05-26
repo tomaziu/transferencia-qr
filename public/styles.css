@@ -562,6 +562,13 @@ h3 {
   gap: 8px;
 }
 
+.pin-toggle-btn {
+  min-height: 36px !important;
+  padding: 0 10px !important;
+  font-size: 0.78rem !important;
+  white-space: nowrap;
+}
+
 .pin-eye-button {
   display: inline-grid;
   width: 36px;
