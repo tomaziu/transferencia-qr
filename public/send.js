@@ -15,6 +15,8 @@ const resumeAdvice = document.querySelector("#resumeAdvice");
 const resumeAdviceTitle = document.querySelector("#resumeAdviceTitle");
 const resumeAdviceText = document.querySelector("#resumeAdviceText");
 const discardResumeButton = document.querySelector("#discardResumeButton");
+const sharedNote = document.querySelector("#sharedNote");
+const noteStatus = document.querySelector("#noteStatus");
 const key = new URLSearchParams(window.location.search).get("key") || "";
 
 const DEFAULT_CHUNK_SIZE = 1024 * 1024;
@@ -28,6 +30,8 @@ let activeFileId = null;
 let activeFileIndex = -1;
 let activeChunkRequest = null;
 let stopRequested = false;
+let latestNoteUpdatedAt = 0;
+let noteSaveTimer = null;
 
 function createId() {
   if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
@@ -111,6 +115,63 @@ function renderUploadControls() {
   stopButton.textContent = "Parar";
   fileInput.disabled = false;
   folderInput.disabled = false;
+}
+
+function setNoteStatus(text) {
+  noteStatus.textContent = text;
+}
+
+function renderSharedNote(note) {
+  if (!note) return;
+
+  const updatedAt = Number(note.updatedAt || 0);
+  const text = String(note.text || "");
+  if (updatedAt < latestNoteUpdatedAt) return;
+
+  if (document.activeElement === sharedNote && sharedNote.value !== text) {
+    latestNoteUpdatedAt = updatedAt;
+    setNoteStatus("Atualizado em outro dispositivo");
+    return;
+  }
+
+  if (sharedNote.value !== text) {
+    sharedNote.value = text;
+  }
+  latestNoteUpdatedAt = updatedAt;
+  setNoteStatus("Sincronizado");
+}
+
+async function saveSharedNote() {
+  const text = sharedNote.value;
+  setNoteStatus("Salvando...");
+
+  try {
+    const response = await fetch(`/api/note?key=${encodeURIComponent(key)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text })
+    });
+    const data = await readJsonResponse(response);
+    renderSharedNote(data.note);
+  } catch {
+    setNoteStatus("Falha ao salvar");
+  }
+}
+
+function scheduleNoteSave() {
+  clearTimeout(noteSaveTimer);
+  setNoteStatus("Digitando...");
+  noteSaveTimer = setTimeout(saveSharedNote, 450);
+}
+
+function connectNoteEvents() {
+  const source = new EventSource(`/events?key=${encodeURIComponent(key)}`);
+
+  source.addEventListener("open", () => setNoteStatus("Sincronizado"));
+  source.addEventListener("error", () => setNoteStatus("Reconectando..."));
+  source.addEventListener("state", (event) => {
+    renderSharedNote(JSON.parse(event.data).note);
+  });
 }
 
 function getPendingUploads() {
@@ -670,8 +731,15 @@ discardResumeButton.addEventListener("click", () => {
   cancelSavedUpload(resumeAdvice.dataset.pendingId);
 });
 
+sharedNote.addEventListener("input", scheduleNoteSave);
+sharedNote.addEventListener("blur", () => {
+  clearTimeout(noteSaveTimer);
+  saveSharedNote();
+});
+
 renderPendingNotice();
 renderUploadControls();
+connectNoteEvents();
 
 if (!("webkitdirectory" in folderInput)) {
   folderPicker.classList.add("hidden");

@@ -82,6 +82,7 @@ test("GET / serves the desktop page", async () => {
   assert.equal(response.status, 200);
   const body = await response.text();
   assert.match(body, /Receber arquivos/);
+  assert.match(body, /sharedNote/);
   assert.match(body, /shareFolderInput/);
   assert.match(body, /webkitdirectory/);
 });
@@ -113,6 +114,7 @@ test("GET /send with key serves folder-capable sender page", async () => {
   const body = await response.text();
   assert.match(body, /folderInput/);
   assert.match(body, /webkitdirectory/);
+  assert.match(body, /sharedNote/);
 });
 
 test("GET /send without key shows expired page", async () => {
@@ -120,6 +122,27 @@ test("GET /send without key shows expired page", async () => {
   assert.equal(response.status, 200);
   const body = await response.text();
   assert.match(body, /expirado|expirada/i);
+});
+
+test("shared note syncs between phone key and desktop session", async () => {
+  const configResponse = await fetch(`${baseUrl}/api/config`);
+  const config = await configResponse.json();
+  const key = new URL(config.sendUrl).searchParams.get("key");
+  const text = `nota compartilhada ${Date.now()}`;
+
+  const save = await fetch(`${baseUrl}/api/note?key=${key}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text })
+  });
+  assert.equal(save.status, 200);
+  const saved = await save.json();
+  assert.equal(saved.note.text, text);
+
+  const read = await fetch(`${baseUrl}/api/note?session=${config.sessionId}`);
+  assert.equal(read.status, 200);
+  const data = await read.json();
+  assert.equal(data.note.text, text);
 });
 
 test("phone upload preserves folder path in saved name", async () => {

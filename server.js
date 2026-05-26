@@ -15,6 +15,7 @@ const DEFAULT_UPLOAD_DIR = path.join(ROOT, "recebidos");
 const SETTINGS_FILE = path.join(ROOT, "transferencia-config.json");
 const CHUNK_SIZE = 1024 * 1024;
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+const NOTE_MAX_LENGTH = 20000;
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -80,6 +81,8 @@ function createSession(id = createSessionId()) {
     completedFiles: new Map(),
     sharedFiles: new Map(),
     shareBundles: new Map(),
+    noteText: "",
+    noteUpdatedAt: Date.now(),
     history: [],
     configCache: null,
     createdAt: Date.now(),
@@ -113,6 +116,14 @@ function sessionFromKey(url) {
   }
 
   return null;
+}
+
+function sessionFromKeyOrId(url) {
+  if (url.searchParams.has("key")) {
+    return sessionFromKey(url);
+  }
+
+  return getOrCreateSession(url.searchParams.get("session"));
 }
 
 function cleanupSessions() {
@@ -352,7 +363,11 @@ function publicHistoryItem(item) {
 function publicState(session) {
   return {
     active: Array.from(session.activeTransfers.values()).map(formatPublicTransfer),
-    history: session.history.slice(0, 12).map(publicHistoryItem)
+    history: session.history.slice(0, 12).map(publicHistoryItem),
+    note: {
+      text: session.noteText || "",
+      updatedAt: session.noteUpdatedAt || session.createdAt
+    }
   };
 }
 
@@ -522,6 +537,49 @@ async function handleFolders(req, res, url) {
     writeJson(res, 400, {
       ok: false,
       error: error.message || "Nao foi possivel abrir esta pasta"
+    });
+  }
+}
+
+async function handleNote(req, res, url) {
+  const session = sessionFromKeyOrId(url);
+  if (!session) {
+    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
+    req.resume();
+    return;
+  }
+
+  if (req.method === "GET") {
+    writeJson(res, 200, {
+      ok: true,
+      note: publicState(session).note
+    });
+    return;
+  }
+
+  if (req.method !== "POST") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    req.resume();
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(req, 64 * 1024);
+    const text = String(body.text || "").slice(0, NOTE_MAX_LENGTH);
+
+    session.noteText = text;
+    session.noteUpdatedAt = Date.now();
+    touchSession(session);
+    broadcastState(session);
+
+    writeJson(res, 200, {
+      ok: true,
+      note: publicState(session).note
+    });
+  } catch (error) {
+    writeJson(res, 400, {
+      ok: false,
+      error: error.message || "Nao foi possivel salvar a anotacao"
     });
   }
 }
@@ -1947,8 +2005,17 @@ async function route(req, res) {
     return;
   }
 
+  if (url.pathname === "/api/note") {
+    await handleNote(req, res, url);
+    return;
+  }
+
   if (url.pathname === "/events") {
-    const session = getOrCreateSession(url.searchParams.get("session"));
+    const session = sessionFromKeyOrId(url);
+    if (!session) {
+      writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
+      return;
+    }
     res.writeHead(200, {
       "content-type": "text/event-stream; charset=utf-8",
       "cache-control": "no-cache, no-transform",

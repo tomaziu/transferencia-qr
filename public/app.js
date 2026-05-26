@@ -46,6 +46,8 @@ const shareReadySize = document.querySelector("#shareReadySize");
 const shareReadyList = document.querySelector("#shareReadyList");
 const shareLink = document.querySelector("#shareLink");
 const shareCopyButton = document.querySelector("#shareCopyButton");
+const sharedNote = document.querySelector("#sharedNote");
+const noteStatus = document.querySelector("#noteStatus");
 
 const RECEIVER_SESSION_KEY = "transferenciaQrReceiverSession";
 const SHARE_CHUNK_SIZE = 1024 * 1024;
@@ -59,6 +61,8 @@ let selectedShareFiles = [];
 let activeShareRequest = null;
 let activeShareId = null;
 let shareStopRequested = false;
+let latestNoteUpdatedAt = 0;
+let noteSaveTimer = null;
 const receiverSessionId = getReceiverSessionId();
 
 function createReceiverSessionId() {
@@ -254,10 +258,58 @@ function folderIcon() {
   `;
 }
 
+function setNoteStatus(text) {
+  noteStatus.textContent = text;
+}
+
+function renderSharedNote(note) {
+  if (!note) return;
+
+  const updatedAt = Number(note.updatedAt || 0);
+  const text = String(note.text || "");
+  if (updatedAt < latestNoteUpdatedAt) return;
+
+  if (document.activeElement === sharedNote && sharedNote.value !== text) {
+    latestNoteUpdatedAt = updatedAt;
+    setNoteStatus("Atualizado em outro dispositivo");
+    return;
+  }
+
+  if (sharedNote.value !== text) {
+    sharedNote.value = text;
+  }
+  latestNoteUpdatedAt = updatedAt;
+  setNoteStatus("Sincronizado");
+}
+
+async function saveSharedNote() {
+  const text = sharedNote.value;
+  setNoteStatus("Salvando...");
+
+  try {
+    const response = await fetch(sessionUrl("/api/note"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text })
+    });
+    const data = await readJsonResponse(response);
+    renderSharedNote(data.note);
+  } catch {
+    setNoteStatus("Falha ao salvar");
+  }
+}
+
+function scheduleNoteSave() {
+  clearTimeout(noteSaveTimer);
+  setNoteStatus("Digitando...");
+  noteSaveTimer = setTimeout(saveSharedNote, 450);
+}
+
 function applyState(state) {
   const active = state.active.find((item) => item.status === "receiving") || state.active[0];
   renderProgress(active);
   renderHistory(state.history || []);
+  renderSharedNote(state.note);
 }
 
 function renderFolderRoots(roots) {
@@ -765,6 +817,12 @@ shareCopyButton.addEventListener("click", async () => {
   setTimeout(() => {
     shareCopyButton.title = "Copiar link";
   }, 1200);
+});
+
+sharedNote.addEventListener("input", scheduleNoteSave);
+sharedNote.addEventListener("blur", () => {
+  clearTimeout(noteSaveTimer);
+  saveSharedNote();
 });
 
 openFolderButton.addEventListener("click", openFolderModal);

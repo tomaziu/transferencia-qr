@@ -165,6 +165,7 @@ h3 {
 .qr-panel,
 .transfer-panel,
 .send-panel,
+.note-panel,
 .pc-share-panel {
   min-width: 0;
   border: 1px solid var(--line);
@@ -175,8 +176,40 @@ h3 {
 
 .qr-panel,
 .transfer-panel,
+.note-panel,
 .pc-share-panel {
   padding: 22px;
+}
+
+.note-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.shared-note {
+  width: 100%;
+  min-height: 170px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 13px 14px;
+  background: #fbfcfc;
+  color: var(--ink);
+  line-height: 1.5;
+  outline: none;
+}
+
+.shared-note:focus {
+  border-color: rgba(15, 143, 134, 0.58);
+  box-shadow: 0 0 0 4px rgba(15, 143, 134, 0.12);
+}
+
+.note-status {
+  align-self: center;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 800;
 }
 
 .pc-share-panel {
@@ -1155,7 +1188,8 @@ h3 {
 
 @media (max-width: 460px) {
   .qr-panel,
-  .transfer-panel {
+  .transfer-panel,
+  .note-panel {
     padding: 16px;
   }
 

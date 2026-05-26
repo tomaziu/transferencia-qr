@@ -26,6 +26,7 @@ Na versão online, cada navegador que abre o painel recebe um QR Code próprio. 
 - QR Code exclusivo por sessão.
 - Envio de um ou vários arquivos em fila.
 - Seleção de pasta com preservação de subpastas quando o navegador informa o caminho relativo.
+- Bloco de notas compartilhado entre computador e celular em tempo real.
 - Compartilhamento de um ou vários arquivos do PC para o celular por QR Code.
 - Barra de progresso com velocidade e tempo restante.
 - Retomada de envio quando a internet falha, enquanto o servidor continuar ativo.
@@ -86,6 +87,13 @@ Enviar arquivos do PC para o celular:
 
 Por padrão, os arquivos recebidos localmente ficam na pasta `recebidos`.
 No painel local, use o botão de pasta em **Destino** para escolher outro local de salvamento.
+
+Bloco de notas compartilhado:
+
+1. Abra o painel no computador.
+2. Escaneie o QR Code no celular.
+3. Digite no bloco de notas em qualquer um dos dois.
+4. O texto aparece na outra tela automaticamente.
 
 ## Arquivos Grandes
 
