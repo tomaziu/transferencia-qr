@@ -145,6 +145,23 @@ h3 {
   min-width: 0;
 }
 
+.site-credit {
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  text-align: center;
+}
+
+.site-credit a {
+  color: var(--teal-dark);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.site-credit a:hover {
+  text-decoration: underline;
+}
+
 .qr-panel,
 .transfer-panel,
 .send-panel {
