@@ -76,6 +76,8 @@ test("GET / serves the desktop page", async () => {
   assert.equal(response.status, 200);
   const body = await response.text();
   assert.match(body, /Receber arquivos/);
+  assert.match(body, /shareFolderInput/);
+  assert.match(body, /webkitdirectory/);
 });
 
 test("GET /api/config returns QR and send URL", async () => {
@@ -95,6 +97,18 @@ test("GET /api/state returns active transfers and history", async () => {
   const state = await response.json();
   assert.ok(Array.isArray(state.active));
   assert.ok(Array.isArray(state.history));
+});
+
+test("GET /send with key serves folder-capable sender page", async () => {
+  const configResponse = await fetch(`${baseUrl}/api/config`);
+  const config = await configResponse.json();
+  const key = new URL(config.sendUrl).searchParams.get("key");
+
+  const response = await fetch(`${baseUrl}/send?key=${key}`);
+  assert.equal(response.status, 200);
+  const body = await response.text();
+  assert.match(body, /folderInput/);
+  assert.match(body, /webkitdirectory/);
 });
 
 test("GET /send without key shows expired page", async () => {

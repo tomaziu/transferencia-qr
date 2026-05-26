@@ -192,6 +192,13 @@ h3 {
   align-items: stretch;
 }
 
+.compact-picker-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .compact-file-picker {
   display: grid;
   min-width: 0;
@@ -865,6 +872,12 @@ h3 {
   text-decoration: none;
 }
 
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .download-list {
   display: grid;
   gap: 10px;
@@ -1126,6 +1139,7 @@ h3 {
   }
 
   .pc-share-grid,
+  .compact-picker-grid,
   .share-result {
     grid-template-columns: 1fr;
   }
@@ -1165,6 +1179,10 @@ h3 {
     align-items: stretch;
     flex-direction: column;
     gap: 4px;
+  }
+
+  .picker-grid {
+    grid-template-columns: 1fr;
   }
 
   .history-actions {

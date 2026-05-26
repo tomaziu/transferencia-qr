@@ -25,6 +25,7 @@ Na versão online, cada navegador que abre o painel recebe um QR Code próprio. 
 
 - QR Code exclusivo por sessão.
 - Envio de um ou vários arquivos em fila.
+- Seleção de pasta, enviando os arquivos internos em fila.
 - Compartilhamento de um ou vários arquivos do PC para o celular por QR Code.
 - Barra de progresso com velocidade e tempo restante.
 - Retomada de envio quando a internet falha, enquanto o servidor continuar ativo.
@@ -69,7 +70,7 @@ Receber arquivos do celular:
 
 1. Abra o painel no computador.
 2. Escaneie o QR Code com o celular.
-3. Selecione um ou mais arquivos no celular.
+3. Selecione um ou mais arquivos, ou uma pasta quando o navegador permitir.
 4. Toque em **Enviar**.
 5. Acompanhe o progresso no computador.
 6. Baixe o arquivo recebido ou, no modo local, confira a pasta configurada.
@@ -77,7 +78,7 @@ Receber arquivos do celular:
 Enviar arquivos do PC para o celular:
 
 1. No painel do computador, use **Enviar para celular**.
-2. Selecione um ou mais arquivos do PC.
+2. Selecione um ou mais arquivos do PC, ou uma pasta quando o navegador permitir.
 3. Clique em **Gerar QR**.
 4. Escaneie o novo QR Code com o celular.
 5. Toque em **Baixar arquivo** ou baixe cada item da lista no celular.

@@ -27,7 +27,10 @@ const folderList = document.querySelector("#folderList");
 const folderError = document.querySelector("#folderError");
 const saveFolderButton = document.querySelector("#saveFolderButton");
 const shareFileInput = document.querySelector("#shareFileInput");
+const shareFolderInput = document.querySelector("#shareFolderInput");
+const shareFolderPicker = document.querySelector("#shareFolderPicker");
 const shareFileName = document.querySelector("#shareFileName");
+const shareFolderName = document.querySelector("#shareFolderName");
 const sharePrepareButton = document.querySelector("#sharePrepareButton");
 const shareCancelButton = document.querySelector("#shareCancelButton");
 const shareProgress = document.querySelector("#shareProgress");
@@ -92,6 +95,10 @@ function createClientId() {
   }
 
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function fileDisplayName(file) {
+  return file.webkitRelativePath || file.name;
 }
 
 function formatBytes(bytes) {
@@ -377,6 +384,7 @@ function setShareControls(uploading) {
   shareCancelButton.hidden = !uploading;
   shareCancelButton.disabled = shareStopRequested;
   shareFileInput.disabled = uploading;
+  shareFolderInput.disabled = uploading;
 }
 
 function resetShareProgress() {
@@ -400,7 +408,7 @@ function updateShareProgress(file, received, startedAt, baseOffset, queue = null
   const titlePrefix = queue && queue.total > 1 ? `Arquivo ${queue.index}/${queue.total}: ` : "";
 
   shareProgress.classList.remove("hidden");
-  shareProgressTitle.textContent = `${titlePrefix}${file.name}`;
+  shareProgressTitle.textContent = `${titlePrefix}${fileDisplayName(file)}`;
   sharePercentLabel.textContent = `${Math.round(percent)}%`;
   shareProgressFill.style.width = `${percent}%`;
   shareReceivedLabel.textContent = `${formatBytes(totalReceived)} / ${formatBytes(totalSize)} · ${formatBytes(speed)}/s`;
@@ -413,7 +421,7 @@ async function startShareUpload(id, file) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       id,
-      fileName: file.name,
+      fileName: fileDisplayName(file),
       size: file.size
     })
   });
@@ -694,17 +702,43 @@ copyButton.addEventListener("click", async () => {
   }, 1200);
 });
 
-shareFileInput.addEventListener("change", () => {
-  selectedShareFiles = Array.from(shareFileInput.files || []);
+function folderNameFromFiles(files) {
+  const firstPath = files.find((file) => file.webkitRelativePath)?.webkitRelativePath || "";
+  return firstPath.split("/")[0] || "";
+}
+
+function updateShareSelection(fileList, source, otherInput) {
+  selectedShareFiles = Array.from(fileList || []);
   const totalSize = selectedShareFiles.reduce((total, file) => total + file.size, 0);
-  shareFileName.textContent = selectedShareFiles.length === 0
-    ? "Nenhum arquivo escolhido"
+  const folderName = folderNameFromFiles(selectedShareFiles);
+  const summary = selectedShareFiles.length === 0
+    ? source === "folder" ? "Nenhuma pasta escolhida" : "Nenhum arquivo escolhido"
     : selectedShareFiles.length === 1
-      ? selectedShareFiles[0].name
-      : `${selectedShareFiles.length} arquivos escolhidos · ${formatBytes(totalSize)}`;
+      ? fileDisplayName(selectedShareFiles[0])
+      : source === "folder" && folderName
+        ? `${selectedShareFiles.length} arquivos de ${folderName} · ${formatBytes(totalSize)}`
+        : `${selectedShareFiles.length} arquivos escolhidos · ${formatBytes(totalSize)}`;
+
+  if (source === "folder") {
+    shareFolderName.textContent = summary;
+    shareFileName.textContent = "Nenhum arquivo escolhido";
+  } else {
+    shareFileName.textContent = summary;
+    shareFolderName.textContent = "Nenhuma pasta escolhida";
+  }
+
+  if (otherInput) otherInput.value = "";
   resetShareProgress();
   shareResult.classList.add("hidden");
   setShareControls(false);
+}
+
+shareFileInput.addEventListener("change", () => {
+  updateShareSelection(shareFileInput.files, "files", shareFolderInput);
+});
+
+shareFolderInput.addEventListener("change", () => {
+  updateShareSelection(shareFolderInput.files, "folder", shareFileInput);
 });
 
 sharePrepareButton.addEventListener("click", () => {
@@ -757,5 +791,8 @@ loadConfig().catch(() => {
 });
 setShareControls(false);
 resetShareProgress();
+if (!("webkitdirectory" in shareFolderInput)) {
+  shareFolderPicker.classList.add("hidden");
+}
 connectEvents();
 setInterval(checkQrCodeFreshness, 15000);

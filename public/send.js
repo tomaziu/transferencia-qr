@@ -1,4 +1,6 @@
 const fileInput = document.querySelector("#fileInput");
+const folderInput = document.querySelector("#folderInput");
+const folderPicker = document.querySelector("#folderPicker");
 const sendButton = document.querySelector("#sendButton");
 const stopButton = document.querySelector("#stopButton");
 const queue = document.querySelector("#queue");
@@ -36,7 +38,7 @@ function createId() {
 }
 
 async function createFileId(file) {
-  const source = `${file.name}|${file.size}|${file.lastModified}`;
+  const source = `${fileDisplayName(file)}|${file.size}|${file.lastModified}`;
 
   if (globalThis.crypto?.subtle && globalThis.TextEncoder) {
     const bytes = new TextEncoder().encode(source);
@@ -76,6 +78,10 @@ function escapeHtml(value) {
   }[char]));
 }
 
+function fileDisplayName(file) {
+  return file.webkitRelativePath || file.name;
+}
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -94,6 +100,7 @@ function renderUploadControls() {
     stopButton.disabled = stopRequested;
     stopButton.textContent = stopRequested ? "Parando..." : "Parar";
     fileInput.disabled = true;
+    folderInput.disabled = true;
     return;
   }
 
@@ -103,6 +110,7 @@ function renderUploadControls() {
   stopButton.disabled = true;
   stopButton.textContent = "Parar";
   fileInput.disabled = false;
+  folderInput.disabled = false;
 }
 
 function getPendingUploads() {
@@ -578,17 +586,18 @@ async function uploadFile(fileInfo) {
   });
 }
 
-fileInput.addEventListener("change", async () => {
+async function selectFiles(fileList, otherInput) {
   if (sending) return;
 
   sendButton.disabled = true;
   sendButton.textContent = "Preparando...";
+  if (otherInput) otherInput.value = "";
 
   selectedFiles = await Promise.all(
-    Array.from(fileInput.files || []).map(async (file) => ({
+    Array.from(fileList || []).map(async (file) => ({
       id: await createFileId(file),
       file,
-      name: file.name,
+      name: fileDisplayName(file),
       size: file.size,
       pending: null,
       status: "queued"
@@ -603,6 +612,14 @@ fileInput.addEventListener("change", async () => {
   renderSizeAdvice();
   renderPendingNotice();
   renderUploadControls();
+}
+
+fileInput.addEventListener("change", () => {
+  selectFiles(fileInput.files, folderInput);
+});
+
+folderInput.addEventListener("change", () => {
+  selectFiles(folderInput.files, fileInput);
 });
 
 sendButton.addEventListener("click", async () => {
@@ -655,4 +672,8 @@ discardResumeButton.addEventListener("click", () => {
 
 renderPendingNotice();
 renderUploadControls();
+
+if (!("webkitdirectory" in folderInput)) {
+  folderPicker.classList.add("hidden");
+}
 updateQueueSummary();

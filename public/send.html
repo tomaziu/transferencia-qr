@@ -16,16 +16,29 @@
       </section>
 
       <section class="send-panel">
-        <label class="file-picker">
-          <input id="fileInput" type="file" multiple>
-          <span class="file-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path d="M12 5v14"></path>
-              <path d="M5 12h14"></path>
-            </svg>
-          </span>
-          <strong>Selecionar arquivos</strong>
-        </label>
+        <div class="picker-grid">
+          <label class="file-picker">
+            <input id="fileInput" type="file" multiple>
+            <span class="file-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 5v14"></path>
+                <path d="M5 12h14"></path>
+              </svg>
+            </span>
+            <strong>Selecionar arquivos</strong>
+          </label>
+
+          <label class="file-picker" id="folderPicker">
+            <input id="folderInput" type="file" webkitdirectory directory multiple>
+            <span class="file-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M3 7h6l2 2h10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <path d="M3 7V5a2 2 0 0 1 2-2h4l2 2h4a2 2 0 0 1 2 2"></path>
+              </svg>
+            </span>
+            <strong>Selecionar pasta</strong>
+          </label>
+        </div>
 
         <div class="send-actions">
           <button id="sendButton" type="button" class="primary-button" disabled>Enviar</button>

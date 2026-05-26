@@ -109,11 +109,19 @@
         </div>
 
         <div class="pc-share-grid">
-          <label class="compact-file-picker">
-            <input id="shareFileInput" type="file" multiple>
-            <span>Selecionar arquivos</span>
-            <strong id="shareFileName">Nenhum arquivo escolhido</strong>
-          </label>
+          <div class="compact-picker-grid">
+            <label class="compact-file-picker">
+              <input id="shareFileInput" type="file" multiple>
+              <span>Selecionar arquivos</span>
+              <strong id="shareFileName">Nenhum arquivo escolhido</strong>
+            </label>
+
+            <label class="compact-file-picker" id="shareFolderPicker">
+              <input id="shareFolderInput" type="file" webkitdirectory directory multiple>
+              <span>Selecionar pasta</span>
+              <strong id="shareFolderName">Nenhuma pasta escolhida</strong>
+            </label>
+          </div>
 
           <div class="pc-share-actions">
             <button id="sharePrepareButton" type="button" class="primary-button compact-button" disabled>Gerar QR</button>
