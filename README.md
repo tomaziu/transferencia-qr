@@ -1,17 +1,57 @@
 ![Transferencia por QR Code](docs/assets/transferencia-qr-banner.png)
 
-# Transferencia por QR Code
+# Transferência por QR Code
 
-App local para receber arquivos do celular pela mesma rede Wi-Fi, com QR Code e barra de progresso em tempo real.
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-2f855a?style=flat-square)](https://nodejs.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-102030?style=flat-square)](LICENSE)
+[![Deploy no Render](https://img.shields.io/badge/Deploy-Render-2364aa?style=flat-square)](https://transferencia-qr.onrender.com/)
 
-## Instalação
+Transfira arquivos pelo navegador usando um QR Code. Abra o painel no computador, escaneie com o celular e acompanhe o envio em tempo real, com barra de progresso, velocidade, tempo restante e histórico de arquivos recebidos.
+
+O projeto funciona em dois modos:
+
+- **Local:** ideal para arquivos grandes, usando a rede Wi-Fi entre celular e computador.
+- **Hospedado:** prático para testes e arquivos menores, usando o servidor online como ponte temporária.
+
+## Demonstração
+
+Acesse a versão hospedada:
+
+[https://transferencia-qr.onrender.com/](https://transferencia-qr.onrender.com/)
+
+Na versão online, cada navegador que abre o painel recebe um QR Code próprio. Os arquivos enviados por aquele QR aparecem apenas naquela sessão, evitando que outras pessoas vejam seus downloads.
+
+## Recursos
+
+- QR Code exclusivo por sessão.
+- Envio de um ou vários arquivos em fila.
+- Barra de progresso com velocidade e tempo restante.
+- Retomada de envio quando a internet falha, enquanto o servidor continuar ativo.
+- Botão para parar o envio atual.
+- Opção para descartar um envio pausado.
+- Avisos para arquivos grandes em MB/GB.
+- Download pelo navegador na versão hospedada.
+- Escolha de pasta de destino quando rodando localmente no computador.
+
+## Como Funciona
+
+```mermaid
+flowchart LR
+  A["Computador abre o painel"] --> B["Servidor gera QR Code da sessão"]
+  B --> C["Celular escaneia o QR Code"]
+  C --> D["Celular envia arquivos em partes"]
+  D --> E["Painel mostra progresso em tempo real"]
+  E --> F["Arquivo fica disponível para baixar ou salvo no PC"]
+```
+
+## Instalação Local
 
 Requisitos:
 
 - [Node.js](https://nodejs.org/) 18 ou superior
 - Computador e celular na mesma rede Wi-Fi
 
-Passos:
+Clone o projeto e instale as dependências:
 
 ```powershell
 git clone https://github.com/tomaziu/transferencia-qr.git
@@ -19,58 +59,94 @@ cd transferencia-qr
 npm install
 ```
 
-No Windows, você também pode usar `start.bat` depois de instalar as dependências.
+Inicie o servidor:
+
+```powershell
+npm start
+```
+
+Depois abra no computador:
+
+```text
+http://localhost:3000
+```
+
+No Windows, também é possível iniciar pelo `start.bat` depois de instalar as dependências.
 
 ## Uso
 
-1. Inicie o app:
+1. Abra o painel no computador.
+2. Escaneie o QR Code com o celular.
+3. Selecione um ou mais arquivos no celular.
+4. Toque em **Enviar**.
+5. Acompanhe o progresso no computador.
+6. Baixe o arquivo recebido ou, no modo local, confira a pasta configurada.
 
-   ```powershell
-   npm start
-   ```
+Por padrão, os arquivos recebidos localmente ficam na pasta `recebidos`.
+No painel local, use o botão de pasta em **Destino** para escolher outro local de salvamento.
 
-2. Abra `http://localhost:3000` no computador.
-3. Escaneie o QR Code com o celular.
-4. Escolha os arquivos no celular e envie.
-5. Acompanhe o progresso no painel do computador.
+## Arquivos Grandes
 
-Por padrão, os arquivos recebidos ficam na pasta `recebidos`.
-No painel do computador, use o botão de pasta em **Destino** para escolher outro local de salvamento.
+Para arquivos grandes, prefira rodar localmente:
 
-O envio é feito em partes. Se a conexão cair, selecione o mesmo arquivo de novo e toque em **Enviar** para continuar de onde parou, enquanto o servidor ainda estiver rodando.
+- No modo local, o arquivo passa pela sua rede Wi-Fi até o computador.
+- No Render grátis, o arquivo precisa passar pela hospedagem e pode falhar se o serviço dormir, reiniciar ou ficar sem espaço temporário.
+- O envio é feito em partes de 1 MB, então uma queda de internet pode ser retomada selecionando o mesmo arquivo novamente.
 
-Se o celular não conseguir abrir o link, confirme se computador e celular estão no mesmo Wi-Fi e permita o acesso do Node.js no Firewall do Windows.
+Referência prática:
 
-## Site hospedado
+| Tamanho | Melhor opção | Observação |
+| --- | --- | --- |
+| Até 500 MB | Local ou hospedado | Hospedado pode funcionar, mas local é mais estável. |
+| 1 GB a 5 GB | Local | Use Wi-Fi estável e mantenha as telas abertas. |
+| 10 GB ou mais | Local | Recomendado usar PC no cabo de rede e impedir suspensão. |
 
-Versão online de demonstração:
+## Privacidade
 
-https://transferencia-qr.onrender.com/
+Cada painel aberto cria uma sessão própria:
 
-Na versão hospedada, os arquivos ficam temporariamente no servidor e aparecem com um botão de download na lista **Recebidos**.
-Cada navegador que abre o painel recebe um QR Code proprio; os envios feitos por esse QR aparecem apenas naquela sessao.
+- O QR Code de uma sessão não é igual ao de outra.
+- O histórico de recebidos é filtrado por sessão.
+- O link de download também pertence à sessão que recebeu o arquivo.
+
+Ainda assim, na versão hospedada os arquivos passam pelo servidor temporário. Para arquivos privados ou muito grandes, rode localmente no seu próprio computador.
+
+## Solução de Problemas
+
+Se o celular não abrir o link:
+
+- Confirme se celular e computador estão na mesma rede Wi-Fi.
+- Permita o acesso do Node.js no Firewall do Windows.
+- Tente usar o endereço IP exibido no painel.
+- Evite VPN ou rede convidada, porque elas podem bloquear comunicação local.
+
+Se o envio ficar lento:
+
+- Aproxime celular e computador do roteador.
+- Prefira Wi-Fi 5 GHz quando houver bom sinal.
+- Evite bloquear a tela do celular durante o envio.
+- No PC, desative suspensão enquanto estiver recebendo arquivos grandes.
 
 ## Desenvolvimento
 
 ```powershell
-npm start   # inicia o servidor
-npm test    # executa os testes de fumaça
+npm start
+npm test
 ```
 
-Consulte [AGENTS.md](AGENTS.md) para orientações úteis a ferramentas de IA e [CONTRIBUTING.md](CONTRIBUTING.md) para contribuir com o projeto.
+Arquivos principais:
+
+- `server.js`: servidor HTTP, sessões, upload em partes e download.
+- `public/app.js`: painel do computador.
+- `public/send.js`: tela do celular para enviar arquivos.
+- `public/styles.css`: estilos da interface.
 
 ## Contribuição
 
 Contribuições são bem-vindas. Leia [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir um pull request.
-
-## Segurança
 
 Para reportar vulnerabilidades, siga [SECURITY.md](SECURITY.md).
 
 ## Licença
 
 Este projeto está licenciado sob a [MIT License](LICENSE).
-
-## Changelog
-
-Veja [CHANGELOG.md](CHANGELOG.md) para o histórico de versões.
