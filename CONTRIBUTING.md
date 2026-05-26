@@ -1,47 +1,47 @@
-# Contributing
+# Contribuindo
 
-Thanks for your interest in improving **Transferencia por QR Code**.
+Obrigado pelo interesse em melhorar o **Transferencia por QR Code**.
 
-## Getting Started
+## Primeiros passos
 
-1. Fork the repository.
-2. Clone your fork locally.
-3. Install dependencies:
+1. Faça um fork do repositório.
+2. Clone o seu fork localmente.
+3. Instale as dependências:
 
    ```powershell
    npm install
    ```
 
-4. Start the app:
+4. Inicie o app:
 
    ```powershell
    npm start
    ```
 
-5. Run tests before opening a pull request:
+5. Rode os testes antes de abrir o pull request:
 
    ```powershell
    npm test
    ```
 
-## Pull Request Guidelines
+## Diretrizes para Pull Request
 
-- Keep changes focused and easy to review.
-- Update `README.md` if behavior or setup changes.
-- Add or update tests when changing server or upload logic.
-- Write commit messages in clear Portuguese or English.
-- Do not include generated files, uploads, or local config (`recebidos/`, `transferencia-config.json`).
+- Mantenha as mudanças focadas e fáceis de revisar.
+- Atualize o `README.md` se houver alteração de comportamento ou setup.
+- Adicione ou atualize testes ao alterar lógica do servidor ou do upload.
+- Escreva mensagens de commit de forma clara.
+- Não inclua arquivos gerados, uploads nem configuração local (`recebidos/`, `transferencia-config.json`).
 
-## Reporting Issues
+## Reporte de problemas
 
-- Use GitHub Issues for bugs and feature requests.
-- For security issues, follow [SECURITY.md](SECURITY.md).
+- Use GitHub Issues para bugs e melhorias.
+- Para falhas de segurança, siga [SECURITY.md](SECURITY.md).
 
-## Code Style
+## Estilo de código
 
-- Match the existing plain Node.js style in `server.js`.
-- Keep UI copy in Brazilian Portuguese unless there is a strong reason not to.
+- Siga o estilo Node.js já existente em `server.js`.
+- Mantenha os textos de interface em português do Brasil, salvo exceções bem justificadas.
 
-## License
+## Licença
 
-By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
+Ao contribuir, você concorda que suas contribuições serão licenciadas sob a [MIT License](LICENSE).

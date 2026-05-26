@@ -1,35 +1,35 @@
-# Security Policy
+# Política de Segurança
 
-## Supported Versions
+## Versões com suporte
 
-| Version | Supported |
+| Versão | Suporte |
 | --- | --- |
-| 1.0.x | Yes |
+| 1.0.x | Sim |
 
-## Reporting a Vulnerability
+## Como reportar uma vulnerabilidade
 
-If you find a security issue, please **do not** open a public GitHub issue with sensitive details.
+Se você encontrar uma falha de segurança, **não** abra uma issue pública no GitHub com detalhes sensíveis.
 
-Instead, report it privately using one of these options:
+Em vez disso, reporte de forma privada por uma destas opções:
 
-1. Open a [GitHub Security Advisory](https://github.com/tomaziu/transferencia-qr/security/advisories/new) for this repository.
-2. Contact the maintainer through GitHub: [@tomaziu](https://github.com/tomaziu).
+1. Abra um [GitHub Security Advisory](https://github.com/tomaziu/transferencia-qr/security/advisories/new) neste repositório.
+2. Entre em contato com o mantenedor via GitHub: [@tomaziu](https://github.com/tomaziu).
 
-Please include:
+Inclua, se possível:
 
-- A clear description of the issue
-- Steps to reproduce
-- Possible impact
-- Suggested fix, if you have one
+- Descrição clara do problema
+- Passos para reproduzir
+- Impacto esperado
+- Sugestão de correção (se houver)
 
-You should receive a response within **7 days**. If the report is accepted, we will work on a fix and coordinate disclosure when appropriate.
+A resposta deve ocorrer em até **7 dias**. Se o relato for aceito, será preparada uma correção e combinada a divulgação responsável.
 
-## Scope Notes
+## Observações de escopo
 
-This app is intended for **local network use**. When running locally:
+Este app foi pensado para uso em **rede local**. Ao executar localmente:
 
-- Keep your firewall rules restrictive when possible.
-- Do not expose the server directly to the public internet without additional hardening.
-- The upload link is protected by a session token generated when the server starts.
+- Mantenha regras de firewall restritivas sempre que possível.
+- Não exponha o servidor diretamente na internet pública sem proteção adicional.
+- O link de envio é protegido por um token de sessão gerado ao iniciar o servidor.
 
-Thank you for helping keep this project safe.
+Obrigado por ajudar a manter o projeto seguro.
