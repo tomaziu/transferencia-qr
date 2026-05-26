@@ -17,6 +17,7 @@ e este projeto adota [Versionamento Semântico](https://semver.org/spec/v2.0.0.h
 - Opção de descartar envio salvo apenas quando houver falha ou pausa.
 - Avisos sobre arquivos grandes em MB/GB.
 - Crédito visual do criador do projeto no site.
+- Página estática de entrada para GitHub Pages enquanto o Render acorda.
 
 ### Melhorado
 

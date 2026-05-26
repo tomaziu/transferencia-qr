@@ -15,7 +15,11 @@ O projeto funciona em dois modos:
 
 ## Demonstração
 
-Acesse a versão hospedada:
+Acesse pela entrada com tela de espera:
+
+[https://tomaziu.github.io/transferencia-qr/](https://tomaziu.github.io/transferencia-qr/)
+
+Link direto do app no Render:
 
 [https://transferencia-qr.onrender.com/](https://transferencia-qr.onrender.com/)
 

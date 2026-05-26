@@ -97,6 +97,17 @@ test("GET /api/state returns active transfers and history", async () => {
   assert.ok(Array.isArray(state.history));
 });
 
+test("GET /healthz returns service status with CORS", async () => {
+  const response = await fetch(`${baseUrl}/healthz`);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("access-control-allow-origin"), "*");
+
+  const health = await response.json();
+  assert.equal(health.ok, true);
+  assert.equal(health.service, "transferencia-qr");
+  assert.equal(health.status, "online");
+});
+
 test("GET /send without key shows expired page", async () => {
   const response = await fetch(`${baseUrl}/send`);
   assert.equal(response.status, 200);
