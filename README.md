@@ -33,17 +33,6 @@ Na versão online, cada navegador que abre o painel recebe um QR Code próprio. 
 - Download pelo navegador na versão hospedada.
 - Escolha de pasta de destino quando rodando localmente no computador.
 
-## Como Funciona
-
-```mermaid
-flowchart LR
-  A["Computador abre o painel"] --> B["Servidor gera QR Code da sessão"]
-  B --> C["Celular escaneia o QR Code"]
-  C --> D["Celular envia arquivos em partes"]
-  D --> E["Painel mostra progresso em tempo real"]
-  E --> F["Arquivo fica disponível para baixar ou salvo no PC"]
-```
-
 ## Instalação Local
 
 Requisitos:
