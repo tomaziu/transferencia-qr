@@ -121,6 +121,24 @@ function setNoteStatus(text) {
   noteStatus.textContent = text;
 }
 
+function applySharedNoteText(text) {
+  const wasFocused = document.activeElement === sharedNote;
+  const oldLength = sharedNote.value.length;
+  const selectionStart = sharedNote.selectionStart;
+  const selectionEnd = sharedNote.selectionEnd;
+
+  if (sharedNote.value !== text) {
+    sharedNote.value = text;
+
+    if (wasFocused && typeof sharedNote.setSelectionRange === "function") {
+      const delta = text.length - oldLength;
+      const nextStart = Math.max(0, Math.min(text.length, selectionStart + delta));
+      const nextEnd = Math.max(0, Math.min(text.length, selectionEnd + delta));
+      sharedNote.setSelectionRange(nextStart, nextEnd);
+    }
+  }
+}
+
 function renderSharedNote(note) {
   if (!note) return;
 
@@ -128,15 +146,7 @@ function renderSharedNote(note) {
   const text = String(note.text || "");
   if (updatedAt < latestNoteUpdatedAt) return;
 
-  if (document.activeElement === sharedNote && sharedNote.value !== text) {
-    latestNoteUpdatedAt = updatedAt;
-    setNoteStatus("Atualizado em outro dispositivo");
-    return;
-  }
-
-  if (sharedNote.value !== text) {
-    sharedNote.value = text;
-  }
+  applySharedNoteText(text);
   latestNoteUpdatedAt = updatedAt;
   setNoteStatus("Sincronizado");
 }
