@@ -1868,7 +1868,8 @@ async function handleDownloadBundle(req, res, url) {
   }
 
   try {
-    await sendZip(res, "recebidos.zip", files);
+    const zipName = files.length === 1 ? path.basename(files[0].fileName, path.extname(files[0].fileName)) + ".zip" : "arquivos-transferencia.zip";
+    await sendZip(res, zipName, files);
   } catch (error) {
     if (!res.headersSent) {
       serveText(res, 500, error.message || "Erro ao gerar ZIP");
