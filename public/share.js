@@ -2,6 +2,7 @@ const shareStatus = document.querySelector("#shareStatus");
 const downloadFileName = document.querySelector("#downloadFileName");
 const downloadFileSize = document.querySelector("#downloadFileSize");
 const downloadFileButton = document.querySelector("#downloadFileButton");
+const downloadList = document.querySelector("#downloadList");
 const downloadMessage = document.querySelector("#downloadMessage");
 
 function formatBytes(bytes) {
@@ -10,6 +11,42 @@ function formatBytes(bytes) {
   const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   const value = bytes / Math.pow(1024, index);
   return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
+}
+
+function normalizeFiles(data) {
+  if (Array.isArray(data.files) && data.files.length) return data.files;
+
+  return [{
+    fileName: data.fileName,
+    size: data.size,
+    downloadUrl: data.downloadUrl
+  }];
+}
+
+function renderDownloadList(files) {
+  downloadList.innerHTML = "";
+  downloadList.classList.toggle("hidden", files.length <= 1);
+
+  for (const file of files) {
+    const row = document.createElement("article");
+    row.className = "download-item";
+
+    const info = document.createElement("div");
+    const name = document.createElement("strong");
+    const size = document.createElement("span");
+    name.textContent = file.fileName || "Arquivo";
+    size.textContent = formatBytes(file.size);
+    info.append(name, size);
+
+    const link = document.createElement("a");
+    link.className = "download-small-button";
+    link.href = file.downloadUrl;
+    link.download = file.fileName || "";
+    link.textContent = "Baixar";
+
+    row.append(info, link);
+    downloadList.append(row);
+  }
 }
 
 async function loadSharedFile() {
@@ -21,11 +58,23 @@ async function loadSharedFile() {
     throw new Error(data.error || "Arquivo indisponivel ou link expirado");
   }
 
+  const files = normalizeFiles(data);
+  const totalSize = Number(data.totalSize ?? data.size ?? files.reduce((total, file) => total + Number(file.size || 0), 0));
+
   shareStatus.textContent = "Pronto";
-  downloadFileName.textContent = data.fileName;
-  downloadFileSize.textContent = formatBytes(data.size);
-  downloadFileButton.href = data.downloadUrl;
-  downloadFileButton.classList.remove("hidden");
+  downloadFileName.textContent = files.length === 1 ? files[0].fileName : `${files.length} arquivos disponiveis`;
+  downloadFileSize.textContent = files.length === 1 ? formatBytes(files[0].size) : `${formatBytes(totalSize)} no total`;
+
+  if (files.length === 1) {
+    downloadFileButton.href = files[0].downloadUrl;
+    downloadFileButton.download = files[0].fileName || "";
+    downloadFileButton.textContent = "Baixar arquivo";
+    downloadFileButton.classList.remove("hidden");
+  } else {
+    downloadFileButton.classList.add("hidden");
+  }
+
+  renderDownloadList(files);
   downloadMessage.textContent = "O navegador do celular decide a pasta de salvamento.";
 }
 
@@ -34,5 +83,7 @@ loadSharedFile().catch((error) => {
   downloadFileName.textContent = "Nao foi possivel abrir este arquivo";
   downloadFileSize.textContent = "--";
   downloadFileButton.classList.add("hidden");
+  downloadList.classList.add("hidden");
+  downloadList.innerHTML = "";
   downloadMessage.textContent = error.message;
 });

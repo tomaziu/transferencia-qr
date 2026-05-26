@@ -308,6 +308,32 @@ h3 {
   margin-top: 14px;
 }
 
+.share-ready-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.share-ready-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid rgba(15, 143, 134, 0.18);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.share-ready-item strong {
+  font-size: 0.92rem;
+}
+
+.share-ready-item span {
+  margin-top: 0;
+  white-space: nowrap;
+}
+
 .qr-box {
   position: relative;
   display: grid;
@@ -837,6 +863,48 @@ h3 {
   color: #fff;
   font-weight: 800;
   text-decoration: none;
+}
+
+.download-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+  text-align: left;
+}
+
+.download-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px;
+  background: #fbfcfc;
+}
+
+.download-item div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.download-item strong,
+.download-item span {
+  overflow-wrap: anywhere;
+}
+
+.download-small-button {
+  display: inline-grid;
+  min-height: 38px;
+  place-items: center;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: var(--teal);
+  color: #fff;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 .file-picker {

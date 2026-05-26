@@ -104,12 +104,7 @@ test("GET /send without key shows expired page", async () => {
   assert.match(body, /expirado|expirada/i);
 });
 
-test("PC share flow prepares a file for phone download", async () => {
-  const session = `test-${Date.now()}`;
-  const id = "pc-share-test";
-  const fileName = "arquivo-do-pc.txt";
-  const body = Buffer.from("conteudo enviado do pc");
-
+async function preparePcShareFile(session, id, fileName, body) {
   const start = await fetch(`${baseUrl}/share/start?session=${session}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -135,6 +130,16 @@ test("PC share flow prepares a file for phone download", async () => {
   assert.match(finished.shareUrl, /\/share\?/);
   assert.match(finished.qrCode, /^data:image\/png;base64,/);
 
+  return finished;
+}
+
+test("PC share flow prepares a file for phone download", async () => {
+  const session = `test-${Date.now()}`;
+  const id = "pc-share-test";
+  const fileName = "arquivo-do-pc.txt";
+  const body = Buffer.from("conteudo enviado do pc");
+  const finished = await preparePcShareFile(session, id, fileName, body);
+
   const sharePath = new URL(finished.shareUrl).pathname + new URL(finished.shareUrl).search;
   const sharePage = await fetch(`${baseUrl}${sharePath}`);
   assert.equal(sharePage.status, 200);
@@ -148,4 +153,47 @@ test("PC share flow prepares a file for phone download", async () => {
   const download = await fetch(`${baseUrl}${shareInfo.downloadUrl}`);
   assert.equal(download.status, 200);
   assert.equal(await download.text(), body.toString());
+});
+
+test("PC share flow creates a QR bundle with multiple files", async () => {
+  const session = `bundle-${Date.now()}`;
+  const files = [
+    { id: "pc-share-a", fileName: "primeiro.txt", body: Buffer.from("primeiro arquivo") },
+    { id: "pc-share-b", fileName: "segundo.txt", body: Buffer.from("segundo arquivo") }
+  ];
+  const finished = [];
+
+  for (const file of files) {
+    finished.push(await preparePcShareFile(session, file.id, file.fileName, file.body));
+  }
+
+  const bundle = await fetch(`${baseUrl}/share/bundle?session=${session}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ids: finished.map((file) => file.id) })
+  });
+  assert.equal(bundle.status, 200);
+
+  const bundled = await bundle.json();
+  assert.equal(bundled.ok, true);
+  assert.equal(bundled.mode, "bundle");
+  assert.equal(bundled.fileCount, 2);
+  assert.match(bundled.shareUrl, /bundle=/);
+  assert.match(bundled.qrCode, /^data:image\/png;base64,/);
+
+  const infoUrl = bundled.shareUrl.replace("/share?", "/share/info?");
+  const info = await fetch(`${baseUrl}${new URL(infoUrl).pathname}${new URL(infoUrl).search}`);
+  assert.equal(info.status, 200);
+
+  const shareInfo = await info.json();
+  assert.equal(shareInfo.mode, "bundle");
+  assert.equal(shareInfo.files.length, 2);
+  assert.equal(shareInfo.totalSize, files[0].body.length + files[1].body.length);
+
+  for (const [index, fileInfo] of shareInfo.files.entries()) {
+    assert.equal(fileInfo.fileName, files[index].fileName);
+    const download = await fetch(`${baseUrl}${fileInfo.downloadUrl}`);
+    assert.equal(download.status, 200);
+    assert.equal(await download.text(), files[index].body.toString());
+  }
 });

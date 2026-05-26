@@ -78,6 +78,7 @@ function createSession(id = createSessionId()) {
     activeTransfers: new Map(),
     completedFiles: new Map(),
     sharedFiles: new Map(),
+    shareBundles: new Map(),
     history: [],
     configCache: null,
     createdAt: Date.now(),
@@ -177,6 +178,16 @@ function shareUrlForRequest(req, session, file) {
     session: session.id,
     id: file.id,
     token: file.downloadToken
+  });
+
+  return `${publicBaseUrlForRequest(req)}/share?${params.toString()}`;
+}
+
+function shareBundleUrlForRequest(req, session, bundle) {
+  const params = new URLSearchParams({
+    session: session.id,
+    bundle: bundle.id,
+    token: bundle.token
   });
 
   return `${publicBaseUrlForRequest(req)}/share?${params.toString()}`;
@@ -528,8 +539,12 @@ function uploadLocationLabel(targetPath) {
 }
 
 function safeUploadId(value) {
+  return normalizeUploadId(value) || crypto.randomUUID();
+}
+
+function normalizeUploadId(value) {
   const id = String(value || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 96);
-  return id || crypto.randomUUID();
+  return id || null;
 }
 
 function partialUploadPath(session, id) {
@@ -611,6 +626,15 @@ async function readShareMeta(session, id) {
 
 async function writeShareMeta(session, meta) {
   await fsp.writeFile(shareMetaPath(session, meta.id), JSON.stringify(meta, null, 2));
+}
+
+function removeSharedFileFromBundles(session, fileId) {
+  for (const [bundleId, bundle] of session.shareBundles) {
+    bundle.fileIds = bundle.fileIds.filter((id) => id !== fileId);
+    if (bundle.fileIds.length === 0) {
+      session.shareBundles.delete(bundleId);
+    }
+  }
 }
 
 function rememberCompletedUpload(session, { id, fileName, savedName, targetPath, size, duration, completedAt }) {
@@ -1170,6 +1194,7 @@ async function handleShareStart(req, res, url) {
     await fsp.mkdir(uploadDir, { recursive: true });
     await removeShareFiles(session, id, session.sharedFiles.get(id)?.targetPath);
     session.sharedFiles.delete(id);
+    removeSharedFileFromBundles(session, id);
     await writeShareMeta(session, meta);
 
     const handle = await fsp.open(sharePartialPath(session, id), "a");
@@ -1367,6 +1392,71 @@ async function handleShareFinish(req, res, url) {
   }
 }
 
+async function handleShareBundle(req, res, url) {
+  const session = getOrCreateSession(url.searchParams.get("session"));
+
+  if (req.method !== "POST") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    req.resume();
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(req);
+    const ids = Array.isArray(body.ids)
+      ? body.ids.map(normalizeUploadId).filter(Boolean)
+      : [];
+
+    if (ids.length === 0) {
+      writeJson(res, 400, { ok: false, error: "Nenhum arquivo informado" });
+      return;
+    }
+
+    const files = ids.map((id) => session.sharedFiles.get(id));
+    if (files.some((file) => !file)) {
+      writeJson(res, 404, { ok: false, error: "Um ou mais arquivos nao estao disponiveis" });
+      return;
+    }
+
+    const bundle = {
+      id: crypto.randomBytes(12).toString("hex"),
+      token: crypto.randomBytes(18).toString("hex"),
+      fileIds: ids,
+      createdAt: Date.now()
+    };
+    const shareUrl = shareBundleUrlForRequest(req, session, bundle);
+    const qrCode = await QRCode.toDataURL(shareUrl, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      scale: 8,
+      color: {
+        dark: "#102030",
+        light: "#ffffff"
+      }
+    });
+
+    session.shareBundles.set(bundle.id, bundle);
+
+    writeJson(res, 200, {
+      ok: true,
+      mode: "bundle",
+      bundleId: bundle.id,
+      fileName: `${files.length} arquivos`,
+      size: files.reduce((total, file) => total + file.size, 0),
+      totalSize: files.reduce((total, file) => total + file.size, 0),
+      fileCount: files.length,
+      files: files.map((file) => shareFileInfo(session, file)),
+      shareUrl,
+      qrCode
+    });
+  } catch (error) {
+    writeJson(res, 400, {
+      ok: false,
+      error: error.message || "Nao foi possivel gerar o pacote de arquivos"
+    });
+  }
+}
+
 async function handleShareCancel(req, res, url) {
   const session = getOrCreateSession(url.searchParams.get("session"));
 
@@ -1383,6 +1473,7 @@ async function handleShareCancel(req, res, url) {
 
     await removeShareFiles(session, id, shared?.targetPath);
     session.sharedFiles.delete(id);
+    removeSharedFileFromBundles(session, id);
 
     writeJson(res, 200, {
       ok: true,
@@ -1397,9 +1488,25 @@ async function handleShareCancel(req, res, url) {
   }
 }
 
+function shareFileInfo(session, file) {
+  const downloadParams = new URLSearchParams({
+    session: session.id,
+    id: file.id,
+    token: file.downloadToken
+  });
+
+  return {
+    id: file.id,
+    fileName: file.fileName,
+    size: file.size,
+    createdAt: file.createdAt,
+    downloadUrl: `/share/download?${downloadParams.toString()}`
+  };
+}
+
 function getSharedFileFromUrl(url) {
   const session = sessions.get(safeSessionId(url.searchParams.get("session")));
-  const id = safeUploadId(url.searchParams.get("id"));
+  const id = normalizeUploadId(url.searchParams.get("id"));
   const token = String(url.searchParams.get("token") || "");
   const file = session?.sharedFiles.get(id);
 
@@ -1409,9 +1516,47 @@ function getSharedFileFromUrl(url) {
   return { session, file };
 }
 
+function getShareBundleFromUrl(url) {
+  const session = sessions.get(safeSessionId(url.searchParams.get("session")));
+  const id = normalizeUploadId(url.searchParams.get("bundle"));
+  const token = String(url.searchParams.get("token") || "");
+  const bundle = session?.shareBundles.get(id);
+
+  if (!session || !bundle || bundle.token !== token) return null;
+
+  const files = bundle.fileIds.map((fileId) => session.sharedFiles.get(fileId));
+  if (files.some((file) => !file)) return null;
+
+  touchSession(session);
+  return { session, bundle, files };
+}
+
 async function handleShareInfo(req, res, url) {
   if (req.method !== "GET") {
     writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    return;
+  }
+
+  if (url.searchParams.has("bundle")) {
+    const bundleMatch = getShareBundleFromUrl(url);
+    if (!bundleMatch) {
+      writeJson(res, 404, { ok: false, error: "Arquivos indisponiveis ou link expirado" });
+      return;
+    }
+
+    const { session, bundle, files } = bundleMatch;
+    const totalSize = files.reduce((total, file) => total + file.size, 0);
+
+    writeJson(res, 200, {
+      ok: true,
+      mode: "bundle",
+      fileName: `${files.length} arquivos`,
+      size: totalSize,
+      totalSize,
+      fileCount: files.length,
+      createdAt: bundle.createdAt,
+      files: files.map((file) => shareFileInfo(session, file))
+    });
     return;
   }
 
@@ -1422,18 +1567,16 @@ async function handleShareInfo(req, res, url) {
   }
 
   const { session, file } = match;
-  const downloadParams = new URLSearchParams({
-    session: session.id,
-    id: file.id,
-    token: file.downloadToken
-  });
+  const fileInfo = shareFileInfo(session, file);
 
   writeJson(res, 200, {
     ok: true,
-    fileName: file.fileName,
-    size: file.size,
-    createdAt: file.createdAt,
-    downloadUrl: `/share/download?${downloadParams.toString()}`
+    mode: "single",
+    fileName: fileInfo.fileName,
+    size: fileInfo.size,
+    createdAt: fileInfo.createdAt,
+    downloadUrl: fileInfo.downloadUrl,
+    files: [fileInfo]
   });
 }
 
@@ -1586,6 +1729,11 @@ async function route(req, res) {
 
   if (url.pathname === "/share/finish") {
     await handleShareFinish(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/share/bundle") {
+    await handleShareBundle(req, res, url);
     return;
   }
 

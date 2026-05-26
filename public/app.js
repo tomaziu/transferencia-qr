@@ -40,6 +40,7 @@ const shareResult = document.querySelector("#shareResult");
 const shareQrImage = document.querySelector("#shareQrImage");
 const shareReadyName = document.querySelector("#shareReadyName");
 const shareReadySize = document.querySelector("#shareReadySize");
+const shareReadyList = document.querySelector("#shareReadyList");
 const shareLink = document.querySelector("#shareLink");
 const shareCopyButton = document.querySelector("#shareCopyButton");
 
@@ -51,7 +52,7 @@ let currentFolder = null;
 let parentFolder = null;
 let currentSendUrl = "";
 let destinationLoaded = false;
-let selectedShareFile = null;
+let selectedShareFiles = [];
 let activeShareRequest = null;
 let activeShareId = null;
 let shareStopRequested = false;
@@ -371,7 +372,7 @@ async function readJsonResponse(response) {
 }
 
 function setShareControls(uploading) {
-  sharePrepareButton.disabled = uploading || !selectedShareFile;
+  sharePrepareButton.disabled = uploading || selectedShareFiles.length === 0;
   sharePrepareButton.textContent = uploading ? "Preparando..." : "Gerar QR";
   shareCancelButton.hidden = !uploading;
   shareCancelButton.disabled = shareStopRequested;
@@ -387,18 +388,22 @@ function resetShareProgress() {
   shareEtaLabel.textContent = "--";
 }
 
-function updateShareProgress(file, received, startedAt, baseOffset) {
-  const percent = file.size > 0 ? Math.min(100, (received / file.size) * 100) : 100;
+function updateShareProgress(file, received, startedAt, baseOffset, queue = null) {
+  const totalSize = queue?.totalSize || file.size;
+  const totalReceived = queue ? Math.min(totalSize, queue.completedBytes + received) : received;
+  const measuredReceived = queue ? totalReceived : Math.max(0, received - baseOffset);
+  const percent = totalSize > 0 ? Math.min(100, (totalReceived / totalSize) * 100) : 100;
   const elapsed = Math.max(0.001, (Date.now() - startedAt) / 1000);
-  const speed = Math.max(0, received - baseOffset) / elapsed;
-  const remaining = Math.max(0, file.size - received);
+  const speed = measuredReceived / elapsed;
+  const remaining = Math.max(0, totalSize - totalReceived);
   const eta = remaining > 0 && speed > 0 ? remaining / speed : 0;
+  const titlePrefix = queue && queue.total > 1 ? `Arquivo ${queue.index}/${queue.total}: ` : "";
 
   shareProgress.classList.remove("hidden");
-  shareProgressTitle.textContent = file.name;
+  shareProgressTitle.textContent = `${titlePrefix}${file.name}`;
   sharePercentLabel.textContent = `${Math.round(percent)}%`;
   shareProgressFill.style.width = `${percent}%`;
-  shareReceivedLabel.textContent = `${formatBytes(received)} / ${formatBytes(file.size)} · ${formatBytes(speed)}/s`;
+  shareReceivedLabel.textContent = `${formatBytes(totalReceived)} / ${formatBytes(totalSize)} · ${formatBytes(speed)}/s`;
   shareEtaLabel.textContent = formatTime(eta);
 }
 
@@ -431,6 +436,16 @@ async function finishShareUpload(id) {
   return readJsonResponse(response);
 }
 
+async function createShareBundle(ids) {
+  const response = await fetch(sessionUrl("/share/bundle"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ids })
+  });
+
+  return readJsonResponse(response);
+}
+
 async function cancelShareUpload(id) {
   if (!id) return;
 
@@ -441,7 +456,7 @@ async function cancelShareUpload(id) {
   });
 }
 
-function uploadShareChunk(id, file, offset, chunk, startedAt, baseOffset) {
+function uploadShareChunk(id, file, offset, chunk, startedAt, baseOffset, queue = null) {
   return new Promise((resolve, reject) => {
     if (shareStopRequested) {
       reject(new Error("Envio cancelado"));
@@ -462,7 +477,7 @@ function uploadShareChunk(id, file, offset, chunk, startedAt, baseOffset) {
 
     xhr.upload.addEventListener("progress", (event) => {
       if (!event.lengthComputable) return;
-      updateShareProgress(file, offset + event.loaded, startedAt, baseOffset);
+      updateShareProgress(file, offset + event.loaded, startedAt, baseOffset, queue);
     });
 
     xhr.addEventListener("load", () => {
@@ -502,80 +517,134 @@ function uploadShareChunk(id, file, offset, chunk, startedAt, baseOffset) {
 }
 
 function renderShareResult(data) {
+  const files = Array.isArray(data.files) && data.files.length
+    ? data.files
+    : [{ fileName: data.fileName, size: data.size }];
+  const totalSize = Number(data.totalSize ?? data.size ?? files.reduce((total, file) => total + Number(file.size || 0), 0));
+
   shareResult.classList.remove("hidden");
   shareQrImage.src = data.qrCode;
-  shareReadyName.textContent = data.fileName;
-  shareReadySize.textContent = formatBytes(data.size);
+  shareReadyName.textContent = files.length === 1 ? files[0].fileName : `${files.length} arquivos prontos`;
+  shareReadySize.textContent = files.length === 1 ? formatBytes(files[0].size) : `${formatBytes(totalSize)} no total`;
   shareLink.value = data.shareUrl;
+
+  shareReadyList.innerHTML = "";
+  shareReadyList.classList.toggle("hidden", files.length <= 1);
+
+  for (const file of files) {
+    const row = document.createElement("div");
+    row.className = "share-ready-item";
+
+    const name = document.createElement("strong");
+    name.textContent = file.fileName || "Arquivo";
+
+    const size = document.createElement("span");
+    size.textContent = formatBytes(file.size);
+
+    row.append(name, size);
+    shareReadyList.append(row);
+  }
 }
 
-async function prepareShareFile() {
-  if (!selectedShareFile) return;
-
-  const id = createClientId();
-  const file = selectedShareFile;
+async function prepareOneShareFile(file, id, queue) {
   activeShareId = id;
+
+  const start = await startShareUpload(id, file);
+  let offset = Math.min(Number(start.received || 0), file.size);
+  const chunkSize = Math.max(256 * 1024, Number(start.chunkSize || SHARE_CHUNK_SIZE));
+  const startedAt = queue?.startedAt || Date.now();
+  const baseOffset = offset;
+
+  updateShareProgress(file, offset, startedAt, baseOffset, queue);
+
+  while (offset < file.size) {
+    if (shareStopRequested) throw new Error("Envio cancelado");
+
+    const end = Math.min(offset + chunkSize, file.size);
+    const chunk = file.slice(offset, end);
+    let attempts = 0;
+
+    while (true) {
+      try {
+        const result = await uploadShareChunk(id, file, offset, chunk, startedAt, baseOffset, queue);
+        offset = Math.min(Number(result.received || end), file.size);
+        updateShareProgress(file, offset, startedAt, baseOffset, queue);
+        break;
+      } catch (error) {
+        if (shareStopRequested) throw error;
+
+        attempts += 1;
+        try {
+          const status = await requestShareStatus(id);
+          if (typeof status.received === "number" && status.received > offset) {
+            offset = Math.min(status.received, file.size);
+            updateShareProgress(file, offset, startedAt, baseOffset, queue);
+            break;
+          }
+        } catch {
+          // The next retry decides whether the connection recovered.
+        }
+
+        if (attempts >= SHARE_MAX_RETRIES) throw error;
+
+        shareEtaLabel.textContent = `reconectando ${attempts}/${SHARE_MAX_RETRIES}`;
+        await new Promise((resolve) => setTimeout(resolve, 800 * attempts));
+      }
+    }
+  }
+
+  const result = await finishShareUpload(id);
+  updateShareProgress(file, file.size, startedAt, baseOffset, queue);
+  activeShareId = null;
+  return result;
+}
+
+async function prepareShareFiles() {
+  if (!selectedShareFiles.length) return;
+
+  const files = [...selectedShareFiles];
+  const totalSize = files.reduce((total, file) => total + file.size, 0);
+  const prepared = [];
+  let completedBytes = 0;
+
   shareStopRequested = false;
   shareResult.classList.add("hidden");
   resetShareProgress();
   setShareControls(true);
 
   try {
-    const start = await startShareUpload(id, file);
-    let offset = Math.min(Number(start.received || 0), file.size);
-    const chunkSize = Math.max(256 * 1024, Number(start.chunkSize || SHARE_CHUNK_SIZE));
     const startedAt = Date.now();
-    const baseOffset = offset;
 
-    updateShareProgress(file, offset, startedAt, baseOffset);
-
-    while (offset < file.size) {
-      if (shareStopRequested) throw new Error("Envio cancelado");
-
-      const end = Math.min(offset + chunkSize, file.size);
-      const chunk = file.slice(offset, end);
-      let attempts = 0;
-
-      while (true) {
-        try {
-          const result = await uploadShareChunk(id, file, offset, chunk, startedAt, baseOffset);
-          offset = Math.min(Number(result.received || end), file.size);
-          updateShareProgress(file, offset, startedAt, baseOffset);
-          break;
-        } catch (error) {
-          if (shareStopRequested) throw error;
-
-          attempts += 1;
-          try {
-            const status = await requestShareStatus(id);
-            if (typeof status.received === "number" && status.received > offset) {
-              offset = Math.min(status.received, file.size);
-              updateShareProgress(file, offset, startedAt, baseOffset);
-              break;
-            }
-          } catch {
-            // The next retry decides whether the connection recovered.
-          }
-
-          if (attempts >= SHARE_MAX_RETRIES) throw error;
-
-          shareEtaLabel.textContent = `reconectando ${attempts}/${SHARE_MAX_RETRIES}`;
-          await new Promise((resolve) => setTimeout(resolve, 800 * attempts));
-        }
-      }
+    for (const [index, file] of files.entries()) {
+      const id = createClientId();
+      const queue = {
+        index: index + 1,
+        total: files.length,
+        completedBytes,
+        totalSize,
+        startedAt
+      };
+      const result = await prepareOneShareFile(file, id, queue);
+      prepared.push(result);
+      completedBytes += file.size;
     }
 
-    const result = await finishShareUpload(id);
-    updateShareProgress(file, file.size, Date.now() - 1000, 0);
     shareEtaLabel.textContent = "pronto";
-    renderShareResult(result);
+
+    if (prepared.length === 1) {
+      renderShareResult(prepared[0]);
+    } else {
+      shareProgressTitle.textContent = "Gerando QR dos arquivos";
+      const bundle = await createShareBundle(prepared.map((file) => file.id));
+      renderShareResult(bundle);
+    }
   } catch (error) {
     shareProgress.classList.remove("hidden");
-    shareProgressTitle.textContent = shareStopRequested ? "Envio cancelado" : "Falha ao preparar arquivo";
+    shareProgressTitle.textContent = shareStopRequested ? "Envio cancelado" : "Falha ao preparar arquivos";
     shareEtaLabel.textContent = error.message || "erro";
-    if (activeShareId) {
-      await cancelShareUpload(activeShareId).catch(() => {});
-    }
+    const idsToCancel = new Set(prepared.map((file) => file.id));
+    if (activeShareId) idsToCancel.add(activeShareId);
+    await Promise.allSettled([...idsToCancel].map((id) => cancelShareUpload(id)));
   } finally {
     activeShareRequest = null;
     activeShareId = null;
@@ -626,15 +695,20 @@ copyButton.addEventListener("click", async () => {
 });
 
 shareFileInput.addEventListener("change", () => {
-  selectedShareFile = shareFileInput.files?.[0] || null;
-  shareFileName.textContent = selectedShareFile ? selectedShareFile.name : "Nenhum arquivo escolhido";
+  selectedShareFiles = Array.from(shareFileInput.files || []);
+  const totalSize = selectedShareFiles.reduce((total, file) => total + file.size, 0);
+  shareFileName.textContent = selectedShareFiles.length === 0
+    ? "Nenhum arquivo escolhido"
+    : selectedShareFiles.length === 1
+      ? selectedShareFiles[0].name
+      : `${selectedShareFiles.length} arquivos escolhidos · ${formatBytes(totalSize)}`;
   resetShareProgress();
   shareResult.classList.add("hidden");
   setShareControls(false);
 });
 
 sharePrepareButton.addEventListener("click", () => {
-  prepareShareFile();
+  prepareShareFiles();
 });
 
 shareCancelButton.addEventListener("click", () => {
