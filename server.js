@@ -338,23 +338,6 @@ function writeJson(res, status, payload) {
   res.end(body);
 }
 
-function writeHealth(res) {
-  const body = JSON.stringify({
-    ok: true,
-    service: "transferencia-qr",
-    status: "online",
-    timestamp: new Date().toISOString()
-  });
-
-  res.writeHead(200, {
-    "access-control-allow-origin": "*",
-    "cache-control": "no-store",
-    "content-type": "application/json; charset=utf-8",
-    "content-length": Buffer.byteLength(body)
-  });
-  res.end(body);
-}
-
 function isLocalRequest(req) {
   const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
   const remoteAddress = req.socket.remoteAddress || "";
@@ -1630,11 +1613,6 @@ async function handleShareDownload(req, res, url) {
 
 async function route(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-
-  if (url.pathname === "/healthz") {
-    writeHealth(res);
-    return;
-  }
 
   if (url.pathname === "/") {
     await serveStatic(res, path.join(PUBLIC_DIR, "index.html"));
