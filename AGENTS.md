@@ -1,60 +1,60 @@
 # AGENTS.md
 
-Guidance for AI coding assistants working on this repository.
+Orientações para assistentes de IA trabalhando neste repositório.
 
-## Project Summary
+## Resumo do projeto
 
-**Transferencia por QR Code** is a Node.js web app for sending files from a phone to a computer on the same local network. The desktop browser shows a QR code; the phone opens `/send` and uploads files with progress tracked via Server-Sent Events.
+**Transferencia por QR Code** é um app web em Node.js para enviar arquivos do celular para o computador na mesma rede local. No computador, o navegador exibe um QR Code; no celular, a página `/send` faz o upload com progresso acompanhado via Server-Sent Events.
 
 ## Stack
 
-- **Runtime:** Node.js (no Express)
-- **Frontend:** Static HTML/CSS/JS in `public/`
-- **Dependency:** `qrcode` only
+- **Runtime:** Node.js (sem Express)
+- **Frontend:** HTML/CSS/JS estáticos em `public/`
+- **Dependência:** apenas `qrcode`
 - **Entry point:** `server.js`
-- **Start:** `npm start` or `start.bat` on Windows
+- **Início:** `npm start` ou `start.bat` no Windows
 
-## Key Files
+## Arquivos principais
 
-| File | Purpose |
+| Arquivo | Função |
 | --- | --- |
-| `server.js` | HTTP server, upload API, SSE, QR config |
-| `public/index.html` + `public/app.js` | Desktop receiver UI |
-| `public/send.html` + `public/send.js` | Mobile sender UI |
-| `transferencia-config.json` | Saved destination folder (gitignored) |
-| `recebidos/` | Default upload directory (gitignored) |
+| `server.js` | Servidor HTTP, API de upload, SSE, configuração do QR |
+| `public/index.html` + `public/app.js` | UI do computador (recebimento) |
+| `public/send.html` + `public/send.js` | UI do celular (envio) |
+| `transferencia-config.json` | Pasta de destino salva (ignorada no git) |
+| `recebidos/` | Diretório padrão de uploads (ignorado no git) |
 
-## Conventions
+## Convenções
 
-- User-facing text is in **Brazilian Portuguese**.
-- Keep changes minimal and focused.
-- Prefer extending existing patterns over adding frameworks.
-- Local-only actions (folder picker, destination API) must stay restricted to loopback requests via `requireLocalRequest`.
-- Upload security relies on a per-session token in the QR link (`?key=`).
+- Textos voltados ao usuário ficam em **português do Brasil**.
+- Mantenha mudanças mínimas e focadas.
+- Prefira estender padrões existentes em vez de adicionar frameworks.
+- Ações locais (escolha de pasta, API de destino) devem continuar restritas a requisições loopback via `requireLocalRequest`.
+- A segurança do upload depende de um token por sessão no link do QR (`?key=`).
 
-## Environment Variables
+## Variáveis de ambiente
 
-| Variable | Default | Description |
+| Variável | Padrão | Descrição |
 | --- | --- | --- |
-| `PORT` | `3000` | HTTP port |
-| `RENDER` / `RENDER_*` | — | Detected for hosted deployment behavior |
+| `PORT` | `3000` | Porta HTTP |
+| `RENDER` / `RENDER_*` | — | Detecta comportamento de ambiente hospedado |
 
-## Testing
+## Testes
 
 ```bash
 npm test
 ```
 
-Smoke tests in `test/smoke.test.js` spawn the server and verify core HTTP endpoints.
+Os testes de fumaça em `test/smoke.test.js` sobem o servidor e verificam endpoints HTTP principais.
 
-## When Changing Upload Logic
+## Ao alterar a lógica de upload
 
-- Chunk size is `CHUNK_SIZE` (1 MB) in `server.js`.
-- Partial uploads use `.upload-*.part` and `.upload-*.json` in the destination folder.
-- Resume flow: `/upload/start` → `/upload/chunk` → `/upload/finish`.
+- O tamanho do chunk é `CHUNK_SIZE` (1 MB) em `server.js`.
+- Uploads parciais usam `.upload-*.part` e `.upload-*.json` na pasta de destino.
+- Fluxo de retomada: `/upload/start` → `/upload/chunk` → `/upload/finish`.
 
-## Do Not
+## Não faça
 
-- Commit `node_modules/`, `recebidos/`, or `transferencia-config.json`.
-- Break mobile upload compatibility without updating both server and `public/send.js`.
-- Remove token validation from `/send` or upload routes.
+- Não commite `node_modules/`, `recebidos/` nem `transferencia-config.json`.
+- Não quebre a compatibilidade do upload no celular sem atualizar o servidor e `public/send.js`.
+- Não remova a validação do token de `/send` ou das rotas de upload.
