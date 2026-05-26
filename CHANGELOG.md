@@ -15,5 +15,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resumable chunked uploads.
 - Configurable destination folder on the desktop.
 - Hosted demo support with temporary server-side downloads.
-
-[1.0.0]: https://github.com/tomaziu/transferencia-qr/releases/tag/v1.0.0
