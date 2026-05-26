@@ -3,8 +3,14 @@
   "version": "1.0.0",
   "description": "Transferencia de arquivos pela rede local com QR Code e barra de progresso.",
   "main": "server.js",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomaziu/transferencia-qr.git"
+  },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "qrcode": "^1.5.4"
