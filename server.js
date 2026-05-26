@@ -77,6 +77,7 @@ function createSession(id = createSessionId()) {
     key: createSessionKey(),
     activeTransfers: new Map(),
     completedFiles: new Map(),
+    sharedFiles: new Map(),
     history: [],
     configCache: null,
     createdAt: Date.now(),
@@ -118,6 +119,9 @@ function cleanupSessions() {
   for (const [id, session] of sessions) {
     if (session.activeTransfers.size > 0) continue;
     if (now - session.updatedAt > SESSION_TTL_MS) {
+      for (const file of session.sharedFiles.values()) {
+        fsp.rm(file.targetPath, { force: true }).catch(() => {});
+      }
       sessions.delete(id);
     }
   }
@@ -153,6 +157,29 @@ function sendUrlForRequest(req, session) {
   }
 
   return `${origin}/send?key=${session.key}`;
+}
+
+function publicBaseUrlForRequest(req) {
+  const origin = requestOrigin(req);
+  const host = String(req?.headers?.host || "").split(",")[0].trim();
+
+  if (!origin || isLoopbackHost(host)) {
+    const [first] = getLanAddresses();
+    const hostname = first ? first.address : "localhost";
+    return `http://${hostname}:${PORT}`;
+  }
+
+  return origin;
+}
+
+function shareUrlForRequest(req, session, file) {
+  const params = new URLSearchParams({
+    session: session.id,
+    id: file.id,
+    token: file.downloadToken
+  });
+
+  return `${publicBaseUrlForRequest(req)}/share?${params.toString()}`;
 }
 
 async function getConfig(req, session) {
@@ -513,6 +540,18 @@ function uploadMetaPath(session, id) {
   return path.join(uploadDir, `.upload-${safeSessionId(session.id)}-${safeUploadId(id)}.json`);
 }
 
+function sharePartialPath(session, id) {
+  return path.join(uploadDir, `.share-${safeSessionId(session.id)}-${safeUploadId(id)}.part`);
+}
+
+function shareMetaPath(session, id) {
+  return path.join(uploadDir, `.share-${safeSessionId(session.id)}-${safeUploadId(id)}.json`);
+}
+
+function shareStoredPath(session, id) {
+  return path.join(uploadDir, `.share-${safeSessionId(session.id)}-${safeUploadId(id)}.file`);
+}
+
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -536,6 +575,26 @@ async function removeUploadFiles(session, id) {
   throw lastError;
 }
 
+async function removeShareFiles(session, id, targetPath = null) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const results = await Promise.allSettled([
+      fsp.rm(sharePartialPath(session, id), { force: true }),
+      fsp.rm(shareMetaPath(session, id), { force: true }),
+      fsp.rm(targetPath || shareStoredPath(session, id), { force: true })
+    ]);
+    const failed = results.find((result) => result.status === "rejected");
+
+    if (!failed) return;
+
+    lastError = failed.reason;
+    await wait(120 * (attempt + 1));
+  }
+
+  throw lastError;
+}
+
 async function readUploadMeta(session, id) {
   const raw = await fsp.readFile(uploadMetaPath(session, id), "utf8");
   return JSON.parse(raw);
@@ -543,6 +602,15 @@ async function readUploadMeta(session, id) {
 
 async function writeUploadMeta(session, meta) {
   await fsp.writeFile(uploadMetaPath(session, meta.id), JSON.stringify(meta, null, 2));
+}
+
+async function readShareMeta(session, id) {
+  const raw = await fsp.readFile(shareMetaPath(session, id), "utf8");
+  return JSON.parse(raw);
+}
+
+async function writeShareMeta(session, meta) {
+  await fsp.writeFile(shareMetaPath(session, meta.id), JSON.stringify(meta, null, 2));
 }
 
 function rememberCompletedUpload(session, { id, fileName, savedName, targetPath, size, duration, completedAt }) {
@@ -1075,6 +1143,331 @@ async function handleDownload(req, res, url) {
   }
 }
 
+async function handleShareStart(req, res, url) {
+  const session = getOrCreateSession(url.searchParams.get("session"));
+
+  if (req.method !== "POST") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    req.resume();
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(req);
+    const id = safeUploadId(body.id);
+    const fileName = sanitizeFileName(body.fileName);
+    const size = Math.max(0, Number(body.size || 0));
+    const meta = {
+      id,
+      sessionId: session.id,
+      fileName,
+      size,
+      downloadToken: crypto.randomBytes(18).toString("hex"),
+      createdAt: Date.now(),
+      startedAt: Date.now()
+    };
+
+    await fsp.mkdir(uploadDir, { recursive: true });
+    await removeShareFiles(session, id, session.sharedFiles.get(id)?.targetPath);
+    session.sharedFiles.delete(id);
+    await writeShareMeta(session, meta);
+
+    const handle = await fsp.open(sharePartialPath(session, id), "a");
+    await handle.close();
+
+    writeJson(res, 200, {
+      ok: true,
+      id,
+      received: 0,
+      chunkSize: CHUNK_SIZE
+    });
+  } catch (error) {
+    writeJson(res, 400, {
+      ok: false,
+      error: error.message || "Nao foi possivel preparar o arquivo"
+    });
+  }
+}
+
+async function handleShareStatus(req, res, url) {
+  const session = getOrCreateSession(url.searchParams.get("session"));
+  const id = safeUploadId(url.searchParams.get("id"));
+  const shared = session.sharedFiles.get(id);
+
+  if (shared) {
+    writeJson(res, 200, {
+      ok: true,
+      id,
+      complete: true,
+      received: shared.size,
+      size: shared.size
+    });
+    return;
+  }
+
+  try {
+    const meta = await readShareMeta(session, id);
+    const received = (await fsp.stat(sharePartialPath(session, id))).size;
+
+    writeJson(res, 200, {
+      ok: true,
+      id,
+      complete: false,
+      received,
+      size: meta.size
+    });
+  } catch {
+    writeJson(res, 200, {
+      ok: true,
+      id,
+      complete: false,
+      received: 0,
+      size: 0
+    });
+  }
+}
+
+async function handleShareChunk(req, res, url) {
+  const session = getOrCreateSession(url.searchParams.get("session"));
+
+  if (req.method !== "POST") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    req.resume();
+    return;
+  }
+
+  const id = safeUploadId(url.searchParams.get("id"));
+  const offset = Math.max(0, Number(url.searchParams.get("offset") || 0));
+
+  let meta = null;
+  try {
+    meta = await readShareMeta(session, id);
+  } catch {
+    writeJson(res, 404, { ok: false, error: "Compartilhamento nao iniciado", received: 0 });
+    req.resume();
+    return;
+  }
+
+  const partialPath = sharePartialPath(session, id);
+  const currentSize = (await fsp.stat(partialPath).catch(() => ({ size: 0 }))).size;
+
+  if (offset !== currentSize) {
+    writeJson(res, 409, {
+      ok: false,
+      error: "Offset fora de sincronia",
+      received: currentSize
+    });
+    req.resume();
+    return;
+  }
+
+  let received = currentSize;
+  let finished = false;
+  const output = fs.createWriteStream(partialPath, { flags: "r+", start: currentSize });
+
+  function fail(message) {
+    if (finished) return;
+    finished = true;
+    output.destroy();
+    if (!res.headersSent) {
+      writeJson(res, 500, { ok: false, error: message, received });
+    }
+  }
+
+  req.on("data", (chunk) => {
+    received += chunk.length;
+    if (received > meta.size) {
+      fail("Arquivo maior que o esperado");
+      req.destroy();
+    }
+  });
+
+  req.on("aborted", () => fail("Envio pausado"));
+  req.on("error", () => fail("Erro de rede"));
+  output.on("error", () => fail("Erro ao salvar parte do arquivo"));
+
+  output.on("finish", () => {
+    if (finished) return;
+    finished = true;
+    writeJson(res, 200, {
+      ok: true,
+      id,
+      received: Math.min(received, meta.size)
+    });
+  });
+
+  req.pipe(output);
+}
+
+async function handleShareFinish(req, res, url) {
+  const session = getOrCreateSession(url.searchParams.get("session"));
+
+  if (req.method !== "POST") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    req.resume();
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(req);
+    const id = safeUploadId(body.id || url.searchParams.get("id"));
+    const meta = await readShareMeta(session, id);
+    const partialPath = sharePartialPath(session, id);
+    const stat = await fsp.stat(partialPath);
+
+    if (stat.size < meta.size) {
+      writeJson(res, 409, {
+        ok: false,
+        error: "Arquivo ainda incompleto",
+        received: stat.size
+      });
+      return;
+    }
+
+    const targetPath = shareStoredPath(session, id);
+    await fsp.rm(targetPath, { force: true });
+    await fsp.rename(partialPath, targetPath);
+    await fsp.rm(shareMetaPath(session, id), { force: true });
+
+    const sharedFile = {
+      id,
+      fileName: meta.fileName,
+      savedName: meta.fileName,
+      targetPath,
+      size: stat.size,
+      downloadToken: meta.downloadToken,
+      createdAt: meta.createdAt || Date.now()
+    };
+    const shareUrl = shareUrlForRequest(req, session, sharedFile);
+    const qrCode = await QRCode.toDataURL(shareUrl, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      scale: 8,
+      color: {
+        dark: "#102030",
+        light: "#ffffff"
+      }
+    });
+
+    session.sharedFiles.set(id, sharedFile);
+
+    writeJson(res, 200, {
+      ok: true,
+      id,
+      fileName: sharedFile.fileName,
+      size: sharedFile.size,
+      shareUrl,
+      qrCode
+    });
+  } catch (error) {
+    writeJson(res, 400, {
+      ok: false,
+      error: error.message || "Nao foi possivel gerar o download"
+    });
+  }
+}
+
+async function handleShareCancel(req, res, url) {
+  const session = getOrCreateSession(url.searchParams.get("session"));
+
+  if (req.method !== "POST" && req.method !== "DELETE") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    req.resume();
+    return;
+  }
+
+  try {
+    const body = req.method === "POST" ? await readJsonBody(req) : {};
+    const id = safeUploadId(body.id || url.searchParams.get("id"));
+    const shared = session.sharedFiles.get(id);
+
+    await removeShareFiles(session, id, shared?.targetPath);
+    session.sharedFiles.delete(id);
+
+    writeJson(res, 200, {
+      ok: true,
+      id,
+      cancelled: true
+    });
+  } catch (error) {
+    writeJson(res, 400, {
+      ok: false,
+      error: error.message || "Nao foi possivel cancelar o compartilhamento"
+    });
+  }
+}
+
+function getSharedFileFromUrl(url) {
+  const session = sessions.get(safeSessionId(url.searchParams.get("session")));
+  const id = safeUploadId(url.searchParams.get("id"));
+  const token = String(url.searchParams.get("token") || "");
+  const file = session?.sharedFiles.get(id);
+
+  if (!session || !file || file.downloadToken !== token) return null;
+
+  touchSession(session);
+  return { session, file };
+}
+
+async function handleShareInfo(req, res, url) {
+  if (req.method !== "GET") {
+    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+    return;
+  }
+
+  const match = getSharedFileFromUrl(url);
+  if (!match) {
+    writeJson(res, 404, { ok: false, error: "Arquivo indisponivel ou link expirado" });
+    return;
+  }
+
+  const { session, file } = match;
+  const downloadParams = new URLSearchParams({
+    session: session.id,
+    id: file.id,
+    token: file.downloadToken
+  });
+
+  writeJson(res, 200, {
+    ok: true,
+    fileName: file.fileName,
+    size: file.size,
+    createdAt: file.createdAt,
+    downloadUrl: `/share/download?${downloadParams.toString()}`
+  });
+}
+
+async function handleShareDownload(req, res, url) {
+  if (req.method !== "GET") {
+    serveText(res, 405, "Metodo nao permitido");
+    return;
+  }
+
+  const match = getSharedFileFromUrl(url);
+  if (!match) {
+    serveText(res, 404, "Arquivo indisponivel ou link expirado");
+    return;
+  }
+
+  const { file } = match;
+
+  try {
+    const stat = await fsp.stat(file.targetPath);
+    if (!stat.isFile()) throw new Error("Arquivo indisponivel");
+
+    res.writeHead(200, {
+      "content-type": "application/octet-stream",
+      "content-length": stat.size,
+      "content-disposition": contentDisposition(file.fileName),
+      "cache-control": "no-store"
+    });
+
+    fs.createReadStream(file.targetPath).pipe(res);
+  } catch {
+    serveText(res, 404, "Arquivo indisponivel");
+  }
+}
+
 async function route(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
 
@@ -1089,6 +1482,11 @@ async function route(req, res) {
       return;
     }
     await serveStatic(res, path.join(PUBLIC_DIR, "send.html"));
+    return;
+  }
+
+  if (url.pathname === "/share") {
+    await serveStatic(res, path.join(PUBLIC_DIR, "share.html"));
     return;
   }
 
@@ -1168,6 +1566,41 @@ async function route(req, res) {
 
   if (url.pathname === "/download") {
     await handleDownload(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/share/start") {
+    await handleShareStart(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/share/status") {
+    await handleShareStatus(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/share/chunk") {
+    await handleShareChunk(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/share/finish") {
+    await handleShareFinish(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/share/cancel") {
+    await handleShareCancel(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/share/info") {
+    await handleShareInfo(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/share/download") {
+    await handleShareDownload(req, res, url);
     return;
   }
 

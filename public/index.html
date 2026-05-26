@@ -100,6 +100,63 @@
         </div>
       </section>
 
+      <section class="pc-share-panel" aria-labelledby="shareTitle">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Enviar para celular</p>
+            <h2 id="shareTitle">Compartilhar arquivo do PC</h2>
+          </div>
+        </div>
+
+        <div class="pc-share-grid">
+          <label class="compact-file-picker">
+            <input id="shareFileInput" type="file">
+            <span>Selecionar arquivo</span>
+            <strong id="shareFileName">Nenhum arquivo escolhido</strong>
+          </label>
+
+          <div class="pc-share-actions">
+            <button id="sharePrepareButton" type="button" class="primary-button compact-button" disabled>Gerar QR</button>
+            <button id="shareCancelButton" type="button" class="secondary-button compact-button" hidden>Cancelar</button>
+          </div>
+        </div>
+
+        <div class="share-progress hidden" id="shareProgress" aria-live="polite">
+          <div class="share-progress-head">
+            <strong id="shareProgressTitle">Preparando arquivo</strong>
+            <span id="sharePercentLabel">0%</span>
+          </div>
+          <div class="progress-track compact-track" aria-label="Progresso do preparo do arquivo">
+            <span class="progress-fill" id="shareProgressFill"></span>
+          </div>
+          <div class="queue-meta">
+            <span id="shareReceivedLabel">0 B</span>
+            <span id="shareEtaLabel">--</span>
+          </div>
+        </div>
+
+        <div class="share-result hidden" id="shareResult">
+          <div class="share-qr-box">
+            <img id="shareQrImage" alt="QR Code para baixar arquivo no celular" width="188" height="188">
+          </div>
+
+          <div class="share-result-copy">
+            <p class="eyebrow">Pronto para baixar</p>
+            <strong id="shareReadyName">Arquivo preparado</strong>
+            <span id="shareReadySize">0 B</span>
+            <div class="link-row share-link-row">
+              <input id="shareLink" type="text" readonly aria-label="Link para baixar no celular">
+              <button id="shareCopyButton" type="button" class="icon-button" title="Copiar link" aria-label="Copiar link">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8 8h10v12H8z"></path>
+                  <path d="M6 16H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <footer class="site-credit">
         Projeto criado por <a href="https://github.com/tomaziu" target="_blank" rel="noreferrer">Tomaziu</a>
       </footer>

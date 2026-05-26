@@ -103,3 +103,49 @@ test("GET /send without key shows expired page", async () => {
   const body = await response.text();
   assert.match(body, /expirado|expirada/i);
 });
+
+test("PC share flow prepares a file for phone download", async () => {
+  const session = `test-${Date.now()}`;
+  const id = "pc-share-test";
+  const fileName = "arquivo-do-pc.txt";
+  const body = Buffer.from("conteudo enviado do pc");
+
+  const start = await fetch(`${baseUrl}/share/start?session=${session}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, fileName, size: body.length })
+  });
+  assert.equal(start.status, 200);
+
+  const chunk = await fetch(`${baseUrl}/share/chunk?session=${session}&id=${id}&offset=0`, {
+    method: "POST",
+    headers: { "content-type": "application/octet-stream" },
+    body
+  });
+  assert.equal(chunk.status, 200);
+
+  const finish = await fetch(`${baseUrl}/share/finish?session=${session}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id })
+  });
+  assert.equal(finish.status, 200);
+  const finished = await finish.json();
+  assert.equal(finished.ok, true);
+  assert.match(finished.shareUrl, /\/share\?/);
+  assert.match(finished.qrCode, /^data:image\/png;base64,/);
+
+  const sharePath = new URL(finished.shareUrl).pathname + new URL(finished.shareUrl).search;
+  const sharePage = await fetch(`${baseUrl}${sharePath}`);
+  assert.equal(sharePage.status, 200);
+
+  const infoUrl = finished.shareUrl.replace("/share?", "/share/info?");
+  const info = await fetch(`${baseUrl}${new URL(infoUrl).pathname}${new URL(infoUrl).search}`);
+  assert.equal(info.status, 200);
+  const shareInfo = await info.json();
+  assert.equal(shareInfo.fileName, fileName);
+
+  const download = await fetch(`${baseUrl}${shareInfo.downloadUrl}`);
+  assert.equal(download.status, 200);
+  assert.equal(await download.text(), body.toString());
+});

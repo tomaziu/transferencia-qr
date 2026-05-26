@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Baixar arquivo</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+    <script src="/assets/share.js" defer></script>
+  </head>
+  <body class="mobile">
+    <main class="phone-shell">
+      <section class="phone-hero">
+        <p class="eyebrow">Arquivo do computador</p>
+        <h1>Baixar arquivo</h1>
+        <p class="lede">Confira o arquivo compartilhado e toque para salvar no celular.</p>
+      </section>
+
+      <section class="send-panel download-panel">
+        <div class="download-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 3v12"></path>
+            <path d="m7 10 5 5 5-5"></path>
+            <path d="M5 21h14"></path>
+          </svg>
+        </div>
+        <p class="eyebrow" id="shareStatus">Carregando</p>
+        <strong id="downloadFileName">Preparando arquivo</strong>
+        <span id="downloadFileSize">--</span>
+        <a id="downloadFileButton" class="primary-link hidden" href="#" download>Baixar arquivo</a>
+        <p id="downloadMessage"></p>
+      </section>
+
+      <footer class="site-credit">
+        Projeto criado por <a href="https://github.com/tomaziu" target="_blank" rel="noreferrer">Tomaziu</a>
+      </footer>
+    </main>
+  </body>
+</html>

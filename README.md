@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-102030?style=flat-square)](LICENSE)
 [![Deploy no Render](https://img.shields.io/badge/Deploy-Render-2364aa?style=flat-square)](https://transferencia-qr.onrender.com/)
 
-Transfira arquivos pelo navegador usando um QR Code. Abra o painel no computador, escaneie com o celular e acompanhe o envio em tempo real, com barra de progresso, velocidade, tempo restante e histórico de arquivos recebidos.
+Transfira arquivos pelo navegador usando QR Code. O celular pode enviar arquivos para o computador, e o computador também pode gerar um QR Code para o celular baixar um arquivo.
 
 O projeto funciona em dois modos:
 
@@ -25,6 +25,7 @@ Na versão online, cada navegador que abre o painel recebe um QR Code próprio. 
 
 - QR Code exclusivo por sessão.
 - Envio de um ou vários arquivos em fila.
+- Compartilhamento de arquivo do PC para o celular por QR Code.
 - Barra de progresso com velocidade e tempo restante.
 - Retomada de envio quando a internet falha, enquanto o servidor continuar ativo.
 - Botão para parar o envio atual.
@@ -64,12 +65,22 @@ No Windows, também é possível iniciar pelo `start.bat` depois de instalar as 
 
 ## Uso
 
+Receber arquivos do celular:
+
 1. Abra o painel no computador.
 2. Escaneie o QR Code com o celular.
 3. Selecione um ou mais arquivos no celular.
 4. Toque em **Enviar**.
 5. Acompanhe o progresso no computador.
 6. Baixe o arquivo recebido ou, no modo local, confira a pasta configurada.
+
+Enviar arquivo do PC para o celular:
+
+1. No painel do computador, use **Enviar para celular**.
+2. Selecione um arquivo do PC.
+3. Clique em **Gerar QR**.
+4. Escaneie o novo QR Code com o celular.
+5. Toque em **Baixar arquivo** no celular.
 
 Por padrão, os arquivos recebidos localmente ficam na pasta `recebidos`.
 No painel local, use o botão de pasta em **Destino** para escolher outro local de salvamento.
@@ -128,6 +139,7 @@ Arquivos principais:
 - `server.js`: servidor HTTP, sessões, upload em partes e download.
 - `public/app.js`: painel do computador.
 - `public/send.js`: tela do celular para enviar arquivos.
+- `public/share.js`: tela do celular para baixar arquivo enviado pelo PC.
 - `public/styles.css`: estilos da interface.
 
 ## Contribuição

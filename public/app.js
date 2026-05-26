@@ -26,13 +26,35 @@ const rootList = document.querySelector("#rootList");
 const folderList = document.querySelector("#folderList");
 const folderError = document.querySelector("#folderError");
 const saveFolderButton = document.querySelector("#saveFolderButton");
+const shareFileInput = document.querySelector("#shareFileInput");
+const shareFileName = document.querySelector("#shareFileName");
+const sharePrepareButton = document.querySelector("#sharePrepareButton");
+const shareCancelButton = document.querySelector("#shareCancelButton");
+const shareProgress = document.querySelector("#shareProgress");
+const shareProgressTitle = document.querySelector("#shareProgressTitle");
+const sharePercentLabel = document.querySelector("#sharePercentLabel");
+const shareProgressFill = document.querySelector("#shareProgressFill");
+const shareReceivedLabel = document.querySelector("#shareReceivedLabel");
+const shareEtaLabel = document.querySelector("#shareEtaLabel");
+const shareResult = document.querySelector("#shareResult");
+const shareQrImage = document.querySelector("#shareQrImage");
+const shareReadyName = document.querySelector("#shareReadyName");
+const shareReadySize = document.querySelector("#shareReadySize");
+const shareLink = document.querySelector("#shareLink");
+const shareCopyButton = document.querySelector("#shareCopyButton");
 
 const RECEIVER_SESSION_KEY = "transferenciaQrReceiverSession";
+const SHARE_CHUNK_SIZE = 1024 * 1024;
+const SHARE_MAX_RETRIES = 3;
 
 let currentFolder = null;
 let parentFolder = null;
 let currentSendUrl = "";
 let destinationLoaded = false;
+let selectedShareFile = null;
+let activeShareRequest = null;
+let activeShareId = null;
+let shareStopRequested = false;
 const receiverSessionId = getReceiverSessionId();
 
 function createReceiverSessionId() {
@@ -63,6 +85,13 @@ function sessionUrl(path) {
   return `${path}${separator}session=${encodeURIComponent(receiverSessionId)}`;
 }
 
+function createClientId() {
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 function formatBytes(bytes) {
   if (!bytes) return "0 B";
@@ -330,6 +359,231 @@ async function saveDestination() {
   }
 }
 
+async function readJsonResponse(response) {
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok === false) {
+    const error = new Error(data.error || "Falha na operacao");
+    error.received = data.received;
+    throw error;
+  }
+
+  return data;
+}
+
+function setShareControls(uploading) {
+  sharePrepareButton.disabled = uploading || !selectedShareFile;
+  sharePrepareButton.textContent = uploading ? "Preparando..." : "Gerar QR";
+  shareCancelButton.hidden = !uploading;
+  shareCancelButton.disabled = shareStopRequested;
+  shareFileInput.disabled = uploading;
+}
+
+function resetShareProgress() {
+  shareProgress.classList.add("hidden");
+  shareProgressTitle.textContent = "Preparando arquivo";
+  sharePercentLabel.textContent = "0%";
+  shareProgressFill.style.width = "0%";
+  shareReceivedLabel.textContent = "0 B";
+  shareEtaLabel.textContent = "--";
+}
+
+function updateShareProgress(file, received, startedAt, baseOffset) {
+  const percent = file.size > 0 ? Math.min(100, (received / file.size) * 100) : 100;
+  const elapsed = Math.max(0.001, (Date.now() - startedAt) / 1000);
+  const speed = Math.max(0, received - baseOffset) / elapsed;
+  const remaining = Math.max(0, file.size - received);
+  const eta = remaining > 0 && speed > 0 ? remaining / speed : 0;
+
+  shareProgress.classList.remove("hidden");
+  shareProgressTitle.textContent = file.name;
+  sharePercentLabel.textContent = `${Math.round(percent)}%`;
+  shareProgressFill.style.width = `${percent}%`;
+  shareReceivedLabel.textContent = `${formatBytes(received)} / ${formatBytes(file.size)} · ${formatBytes(speed)}/s`;
+  shareEtaLabel.textContent = formatTime(eta);
+}
+
+async function startShareUpload(id, file) {
+  const response = await fetch(sessionUrl("/share/start"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      id,
+      fileName: file.name,
+      size: file.size
+    })
+  });
+
+  return readJsonResponse(response);
+}
+
+async function requestShareStatus(id) {
+  const response = await fetch(sessionUrl(`/share/status?id=${encodeURIComponent(id)}`));
+  return readJsonResponse(response);
+}
+
+async function finishShareUpload(id) {
+  const response = await fetch(sessionUrl("/share/finish"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id })
+  });
+
+  return readJsonResponse(response);
+}
+
+async function cancelShareUpload(id) {
+  if (!id) return;
+
+  await fetch(sessionUrl("/share/cancel"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id })
+  });
+}
+
+function uploadShareChunk(id, file, offset, chunk, startedAt, baseOffset) {
+  return new Promise((resolve, reject) => {
+    if (shareStopRequested) {
+      reject(new Error("Envio cancelado"));
+      return;
+    }
+
+    const xhr = new XMLHttpRequest();
+    activeShareRequest = xhr;
+
+    const clearActiveRequest = () => {
+      if (activeShareRequest === xhr) {
+        activeShareRequest = null;
+      }
+    };
+
+    xhr.open("POST", sessionUrl(`/share/chunk?id=${encodeURIComponent(id)}&offset=${encodeURIComponent(offset)}`));
+    xhr.setRequestHeader("content-type", "application/octet-stream");
+
+    xhr.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) return;
+      updateShareProgress(file, offset + event.loaded, startedAt, baseOffset);
+    });
+
+    xhr.addEventListener("load", () => {
+      clearActiveRequest();
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText || "{}");
+      } catch {
+        data = { error: xhr.responseText || "Falha ao preparar arquivo" };
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+        return;
+      }
+
+      if (xhr.status === 409 && typeof data.received === "number") {
+        resolve(data);
+        return;
+      }
+
+      const error = new Error(data.error || "Falha ao preparar arquivo");
+      error.received = data.received;
+      reject(error);
+    });
+
+    xhr.addEventListener("error", () => {
+      clearActiveRequest();
+      reject(new Error("Erro de rede"));
+    });
+    xhr.addEventListener("abort", () => {
+      clearActiveRequest();
+      reject(new Error("Envio cancelado"));
+    });
+    xhr.send(chunk);
+  });
+}
+
+function renderShareResult(data) {
+  shareResult.classList.remove("hidden");
+  shareQrImage.src = data.qrCode;
+  shareReadyName.textContent = data.fileName;
+  shareReadySize.textContent = formatBytes(data.size);
+  shareLink.value = data.shareUrl;
+}
+
+async function prepareShareFile() {
+  if (!selectedShareFile) return;
+
+  const id = createClientId();
+  const file = selectedShareFile;
+  activeShareId = id;
+  shareStopRequested = false;
+  shareResult.classList.add("hidden");
+  resetShareProgress();
+  setShareControls(true);
+
+  try {
+    const start = await startShareUpload(id, file);
+    let offset = Math.min(Number(start.received || 0), file.size);
+    const chunkSize = Math.max(256 * 1024, Number(start.chunkSize || SHARE_CHUNK_SIZE));
+    const startedAt = Date.now();
+    const baseOffset = offset;
+
+    updateShareProgress(file, offset, startedAt, baseOffset);
+
+    while (offset < file.size) {
+      if (shareStopRequested) throw new Error("Envio cancelado");
+
+      const end = Math.min(offset + chunkSize, file.size);
+      const chunk = file.slice(offset, end);
+      let attempts = 0;
+
+      while (true) {
+        try {
+          const result = await uploadShareChunk(id, file, offset, chunk, startedAt, baseOffset);
+          offset = Math.min(Number(result.received || end), file.size);
+          updateShareProgress(file, offset, startedAt, baseOffset);
+          break;
+        } catch (error) {
+          if (shareStopRequested) throw error;
+
+          attempts += 1;
+          try {
+            const status = await requestShareStatus(id);
+            if (typeof status.received === "number" && status.received > offset) {
+              offset = Math.min(status.received, file.size);
+              updateShareProgress(file, offset, startedAt, baseOffset);
+              break;
+            }
+          } catch {
+            // The next retry decides whether the connection recovered.
+          }
+
+          if (attempts >= SHARE_MAX_RETRIES) throw error;
+
+          shareEtaLabel.textContent = `reconectando ${attempts}/${SHARE_MAX_RETRIES}`;
+          await new Promise((resolve) => setTimeout(resolve, 800 * attempts));
+        }
+      }
+    }
+
+    const result = await finishShareUpload(id);
+    updateShareProgress(file, file.size, Date.now() - 1000, 0);
+    shareEtaLabel.textContent = "pronto";
+    renderShareResult(result);
+  } catch (error) {
+    shareProgress.classList.remove("hidden");
+    shareProgressTitle.textContent = shareStopRequested ? "Envio cancelado" : "Falha ao preparar arquivo";
+    shareEtaLabel.textContent = error.message || "erro";
+    if (activeShareId) {
+      await cancelShareUpload(activeShareId).catch(() => {});
+    }
+  } finally {
+    activeShareRequest = null;
+    activeShareId = null;
+    shareStopRequested = false;
+    setShareControls(false);
+  }
+}
+
 async function loadConfig() {
   const response = await fetch(sessionUrl("/api/config"));
   const config = await response.json();
@@ -371,6 +625,40 @@ copyButton.addEventListener("click", async () => {
   }, 1200);
 });
 
+shareFileInput.addEventListener("change", () => {
+  selectedShareFile = shareFileInput.files?.[0] || null;
+  shareFileName.textContent = selectedShareFile ? selectedShareFile.name : "Nenhum arquivo escolhido";
+  resetShareProgress();
+  shareResult.classList.add("hidden");
+  setShareControls(false);
+});
+
+sharePrepareButton.addEventListener("click", () => {
+  prepareShareFile();
+});
+
+shareCancelButton.addEventListener("click", () => {
+  shareStopRequested = true;
+  shareCancelButton.disabled = true;
+  if (activeShareRequest) {
+    activeShareRequest.abort();
+  }
+});
+
+shareCopyButton.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(shareLink.value);
+  } catch {
+    shareLink.select();
+    document.execCommand("copy");
+  }
+
+  shareCopyButton.title = "Copiado";
+  setTimeout(() => {
+    shareCopyButton.title = "Copiar link";
+  }, 1200);
+});
+
 openFolderButton.addEventListener("click", openFolderModal);
 closeFolderButton.addEventListener("click", closeFolderModal);
 folderModal.addEventListener("click", (event) => {
@@ -393,5 +681,7 @@ saveFolderButton.addEventListener("click", saveDestination);
 loadConfig().catch(() => {
   qrLoader.textContent = "Nao foi possivel gerar o QR Code";
 });
+setShareControls(false);
+resetShareProgress();
 connectEvents();
 setInterval(checkQrCodeFreshness, 15000);

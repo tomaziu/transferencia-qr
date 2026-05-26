@@ -164,7 +164,8 @@ h3 {
 
 .qr-panel,
 .transfer-panel,
-.send-panel {
+.send-panel,
+.pc-share-panel {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -173,8 +174,138 @@ h3 {
 }
 
 .qr-panel,
-.transfer-panel {
+.transfer-panel,
+.pc-share-panel {
   padding: 22px;
+}
+
+.pc-share-panel {
+  display: grid;
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.pc-share-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.compact-file-picker {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  border: 1px dashed #adc2bc;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfc;
+  cursor: pointer;
+}
+
+.compact-file-picker input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.compact-file-picker span {
+  color: var(--teal-dark);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.compact-file-picker strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pc-share-actions {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.pc-share-actions .compact-button {
+  margin-top: 0;
+}
+
+.share-progress {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(35, 100, 170, 0.24);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8faf9;
+}
+
+.share-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.share-progress-head strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.share-progress-head span {
+  color: var(--teal-dark);
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.compact-track {
+  margin: 0;
+}
+
+.share-result {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  border: 1px solid rgba(15, 143, 134, 0.28);
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(15, 143, 134, 0.08);
+}
+
+.share-qr-box {
+  display: grid;
+  min-height: 210px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.share-qr-box img {
+  width: min(188px, 100%);
+  height: auto;
+}
+
+.share-result-copy {
+  min-width: 0;
+}
+
+.share-result-copy strong,
+.share-result-copy span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.share-result-copy span {
+  margin-top: 5px;
+  color: var(--muted);
+}
+
+.share-link-row {
+  margin-top: 14px;
 }
 
 .qr-box {
@@ -646,13 +777,30 @@ h3 {
   text-align: center;
 }
 
-.expired-panel p {
+.download-panel {
+  display: grid;
+  gap: 12px;
+  text-align: center;
+}
+
+.expired-panel p,
+.download-panel p {
   margin-bottom: 0;
   color: var(--muted);
   line-height: 1.5;
 }
 
-.expired-mark {
+.download-panel strong,
+.download-panel span {
+  overflow-wrap: anywhere;
+}
+
+.download-panel span {
+  color: var(--muted);
+}
+
+.expired-mark,
+.download-mark {
   display: grid;
   width: 68px;
   height: 68px;
@@ -663,7 +811,13 @@ h3 {
   color: var(--amber);
 }
 
-.expired-mark svg {
+.download-mark {
+  background: rgba(15, 143, 134, 0.12);
+  color: var(--teal-dark);
+}
+
+.expired-mark svg,
+.download-mark svg {
   width: 34px;
   height: 34px;
   fill: none;
@@ -744,6 +898,11 @@ h3 {
   background: #fff;
   color: var(--blue);
   font-weight: 800;
+}
+
+.pc-share-actions .primary-button,
+.pc-share-actions .secondary-button {
+  width: auto;
 }
 
 .stop-button {
@@ -896,6 +1055,15 @@ h3 {
 
   .workspace {
     grid-template-columns: 1fr;
+  }
+
+  .pc-share-grid,
+  .share-result {
+    grid-template-columns: 1fr;
+  }
+
+  .pc-share-actions {
+    flex-direction: column;
   }
 
   .metrics {
