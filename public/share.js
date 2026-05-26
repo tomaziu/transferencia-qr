@@ -65,7 +65,12 @@ async function loadSharedFile() {
   downloadFileName.textContent = files.length === 1 ? files[0].fileName : `${files.length} arquivos disponiveis`;
   downloadFileSize.textContent = files.length === 1 ? formatBytes(files[0].size) : `${formatBytes(totalSize)} no total`;
 
-  if (files.length === 1) {
+  if (data.zipDownloadUrl) {
+    downloadFileButton.href = data.zipDownloadUrl;
+    downloadFileButton.download = "";
+    downloadFileButton.textContent = "Baixar tudo (.zip)";
+    downloadFileButton.classList.remove("hidden");
+  } else if (files.length === 1) {
     downloadFileButton.href = files[0].downloadUrl;
     downloadFileButton.download = files[0].fileName || "";
     downloadFileButton.textContent = "Baixar arquivo";
@@ -75,7 +80,9 @@ async function loadSharedFile() {
   }
 
   renderDownloadList(files);
-  downloadMessage.textContent = "O navegador do celular decide a pasta de salvamento.";
+  downloadMessage.textContent = data.zipDownloadUrl
+    ? "Use o ZIP para manter pastas e subpastas. Downloads individuais salvam arquivos soltos."
+    : "O navegador do celular decide a pasta de salvamento.";
 }
 
 loadSharedFile().catch((error) => {

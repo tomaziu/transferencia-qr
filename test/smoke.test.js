@@ -71,6 +71,12 @@ after(() => {
   }
 });
 
+async function getSendKey() {
+  const configResponse = await fetch(`${baseUrl}/api/config`);
+  const config = await configResponse.json();
+  return new URL(config.sendUrl).searchParams.get("key");
+}
+
 test("GET / serves the desktop page", async () => {
   const response = await fetch(`${baseUrl}/`);
   assert.equal(response.status, 200);
@@ -100,9 +106,7 @@ test("GET /api/state returns active transfers and history", async () => {
 });
 
 test("GET /send with key serves folder-capable sender page", async () => {
-  const configResponse = await fetch(`${baseUrl}/api/config`);
-  const config = await configResponse.json();
-  const key = new URL(config.sendUrl).searchParams.get("key");
+  const key = await getSendKey();
 
   const response = await fetch(`${baseUrl}/send?key=${key}`);
   assert.equal(response.status, 200);
@@ -116,6 +120,42 @@ test("GET /send without key shows expired page", async () => {
   assert.equal(response.status, 200);
   const body = await response.text();
   assert.match(body, /expirado|expirada/i);
+});
+
+test("phone upload preserves folder path in saved name", async () => {
+  const key = await getSendKey();
+  const id = `folder-upload-${Date.now()}`;
+  const fileName = `pasta-teste-${Date.now()}/sub/arquivo.txt`;
+  const body = Buffer.from("conteudo com pasta");
+
+  const start = await fetch(`${baseUrl}/upload/start?key=${key}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, fileName, size: body.length })
+  });
+  assert.equal(start.status, 200);
+
+  const chunk = await fetch(`${baseUrl}/upload/chunk?key=${key}&id=${id}&offset=0`, {
+    method: "POST",
+    headers: { "content-type": "application/octet-stream" },
+    body
+  });
+  assert.equal(chunk.status, 200);
+
+  const finish = await fetch(`${baseUrl}/upload/finish?key=${key}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id })
+  });
+  assert.equal(finish.status, 200);
+
+  const finished = await finish.json();
+  assert.equal(finished.fileName, fileName);
+  assert.equal(finished.savedName, fileName);
+
+  const download = await fetch(`${baseUrl}${finished.downloadUrl}`);
+  assert.equal(download.status, 200);
+  assert.equal(await download.text(), body.toString());
 });
 
 async function preparePcShareFile(session, id, fileName, body) {
@@ -172,8 +212,8 @@ test("PC share flow prepares a file for phone download", async () => {
 test("PC share flow creates a QR bundle with multiple files", async () => {
   const session = `bundle-${Date.now()}`;
   const files = [
-    { id: "pc-share-a", fileName: "primeiro.txt", body: Buffer.from("primeiro arquivo") },
-    { id: "pc-share-b", fileName: "segundo.txt", body: Buffer.from("segundo arquivo") }
+    { id: "pc-share-a", fileName: "pasta/primeiro.txt", body: Buffer.from("primeiro arquivo") },
+    { id: "pc-share-b", fileName: "pasta/sub/segundo.txt", body: Buffer.from("segundo arquivo") }
   ];
   const finished = [];
 
@@ -203,6 +243,7 @@ test("PC share flow creates a QR bundle with multiple files", async () => {
   assert.equal(shareInfo.mode, "bundle");
   assert.equal(shareInfo.files.length, 2);
   assert.equal(shareInfo.totalSize, files[0].body.length + files[1].body.length);
+  assert.match(shareInfo.zipDownloadUrl, /\/share\/download-bundle\?/);
 
   for (const [index, fileInfo] of shareInfo.files.entries()) {
     assert.equal(fileInfo.fileName, files[index].fileName);
@@ -210,4 +251,12 @@ test("PC share flow creates a QR bundle with multiple files", async () => {
     assert.equal(download.status, 200);
     assert.equal(await download.text(), files[index].body.toString());
   }
+
+  const zip = await fetch(`${baseUrl}${shareInfo.zipDownloadUrl}`);
+  assert.equal(zip.status, 200);
+  assert.match(zip.headers.get("content-type"), /application\/zip/);
+  const zipBody = Buffer.from(await zip.arrayBuffer());
+  assert.equal(zipBody.subarray(0, 4).toString("hex"), "504b0304");
+  assert.match(zipBody.toString("latin1"), /pasta\/primeiro\.txt/);
+  assert.match(zipBody.toString("latin1"), /pasta\/sub\/segundo\.txt/);
 });

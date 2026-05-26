@@ -11,7 +11,7 @@ e este projeto adota [Versionamento Semântico](https://semver.org/spec/v2.0.0.h
 
 - Envio de arquivos do computador para o celular por QR Code.
 - Suporte a vários arquivos no envio do computador para o celular, com QR Code único e lista de downloads no celular.
-- Seleção de pasta no envio do celular e do computador, usando os arquivos internos como fila.
+- Seleção de pasta no envio do celular e do computador, preservando subpastas por caminho relativo ou ZIP.
 - QR Code exclusivo por navegador/sessão, evitando que downloads de uma pessoa apareçam para outra.
 - Aviso visual quando o QR Code de envio do celular expira.
 - Botão para parar um envio em andamento.

@@ -25,7 +25,7 @@ Na versão online, cada navegador que abre o painel recebe um QR Code próprio. 
 
 - QR Code exclusivo por sessão.
 - Envio de um ou vários arquivos em fila.
-- Seleção de pasta, enviando os arquivos internos em fila.
+- Seleção de pasta com preservação de subpastas quando o navegador informa o caminho relativo.
 - Compartilhamento de um ou vários arquivos do PC para o celular por QR Code.
 - Barra de progresso com velocidade e tempo restante.
 - Retomada de envio quando a internet falha, enquanto o servidor continuar ativo.
@@ -74,6 +74,7 @@ Receber arquivos do celular:
 4. Toque em **Enviar**.
 5. Acompanhe o progresso no computador.
 6. Baixe o arquivo recebido ou, no modo local, confira a pasta configurada.
+7. Ao selecionar pasta, as subpastas são recriadas dentro do destino quando o app roda localmente.
 
 Enviar arquivos do PC para o celular:
 
@@ -81,7 +82,7 @@ Enviar arquivos do PC para o celular:
 2. Selecione um ou mais arquivos do PC, ou uma pasta quando o navegador permitir.
 3. Clique em **Gerar QR**.
 4. Escaneie o novo QR Code com o celular.
-5. Toque em **Baixar arquivo** ou baixe cada item da lista no celular.
+5. Toque em **Baixar tudo (.zip)** para manter pastas/subpastas ou baixe cada item da lista separadamente.
 
 Por padrão, os arquivos recebidos localmente ficam na pasta `recebidos`.
 No painel local, use o botão de pasta em **Destino** para escolher outro local de salvamento.
