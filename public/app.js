@@ -8,8 +8,7 @@ const qrNoticeClose = document.querySelector("#qrNoticeClose");
 const addressList = document.querySelector("#addressList");
 const connectionDot = document.querySelector("#connectionDot");
 const connectionText = document.querySelector("#connectionText");
-const mobileConnectionDot = document.querySelector("#mobileConnectionDot");
-const mobileConnectionText = document.querySelector("#mobileConnectionText");
+
 const themeToggle = document.querySelector("#themeToggle");
 const sessionPin = document.querySelector("#sessionPin");
 const pinVisibilityButton = document.querySelector("#pinVisibilityButton");
@@ -32,7 +31,6 @@ const notifyButton = document.querySelector("#notifyButton");
 const emptyState = document.querySelector("#emptyState");
 const historyList = document.querySelector("#historyList");
 const historyCount = document.querySelector("#historyCount");
-const clearHistoryButton = document.querySelector("#clearHistoryButton");
 const downloadBundleButton = document.querySelector("#downloadBundleButton");
 const destinationBox = document.querySelector("#destinationBox");
 const currentDestination = document.querySelector("#currentDestination");
@@ -302,13 +300,8 @@ function setConnection(online) {
 function renderMobilePresence(mobile) {
   const connected = Boolean(mobile?.connected);
   const count = Number(mobile?.count || 0);
-  const label = String(mobile?.label || "").trim();
-  const suffix = label ? ` (${label})` : count > 1 ? ` (${count})` : "";
   const clients = Array.isArray(mobile?.clients) ? mobile.clients : [];
 
-  mobileConnectionDot.classList.toggle("online", connected);
-  mobileConnectionDot.classList.toggle("offline", !connected);
-  mobileConnectionText.textContent = connected ? `Celular conectado${suffix}` : "Celular desconectado";
   deviceCount.textContent = String(count);
   deviceList.innerHTML = "";
 
@@ -450,7 +443,6 @@ function renderProgress(transfer) {
 
 function renderHistory(items) {
   historyCount.textContent = String(items.length);
-  clearHistoryButton.disabled = items.length === 0;
   historyList.innerHTML = "";
 
   const downloadable = items.filter((item) => item.downloadUrl);
@@ -1069,21 +1061,6 @@ async function endSession() {
   );
 }
 
-async function clearHistory() {
-  const confirmed = window.confirm("Limpar a lista de recebidos desta sessao?");
-  if (!confirmed) return;
-
-  clearHistoryButton.disabled = true;
-
-  try {
-    const response = await fetch(sessionUrl("/api/history/clear"), { method: "POST" });
-    const data = await readJsonResponse(response);
-    if (data.state) applyState(data.state);
-  } finally {
-    clearHistoryButton.disabled = false;
-  }
-}
-
 function connectEvents() {
   const source = new EventSource(sessionUrl("/events"));
 
@@ -1353,10 +1330,6 @@ renewQrButton.addEventListener("click", () => {
 
 endSessionButton.addEventListener("click", () => {
   endSession().catch((error) => showQrNotice(error.message || "Nao foi possivel encerrar a sessao"));
-});
-
-clearHistoryButton.addEventListener("click", () => {
-  clearHistory().catch((error) => showQrNotice(error.message || "Nao foi possivel limpar o historico"));
 });
 
 sharedNote.addEventListener("input", scheduleNoteSave);
