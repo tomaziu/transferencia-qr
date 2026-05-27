@@ -17,7 +17,7 @@ e este projeto adota [Versionamento Semântico](https://semver.org/spec/v2.0.0.h
 
 ### Melhorado
 
-- Código de rotas, sessões e geração de ZIP separado em módulos dentro de `src/`.
+- Código de rotas, sessões, uploads, compartilhamento e geração de ZIP separado em módulos dentro de `src/`.
 - Testes de fumaça cobrem prévia de imagem e lista de aparelhos conectados.
 
 ## [1.2.0] - 2026-05-26

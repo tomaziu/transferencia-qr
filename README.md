@@ -166,6 +166,8 @@ Arquivos principais:
 - `server.js`: servidor HTTP e composição das rotas principais.
 - `src/routes.js`: roteamento HTTP do app.
 - `src/sessions.js`: identificação de aparelhos e estado público de conexão.
+- `src/uploads.js`: helpers de uploads, IDs e prévias de imagem.
+- `src/share.js`: helpers de compartilhamento do PC para o celular.
 - `src/zip.js`: geração de downloads `.zip`.
 - `public/app.js`: painel do computador.
 - `public/send.js`: tela do celular para enviar arquivos.

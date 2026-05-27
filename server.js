@@ -7,6 +7,8 @@ const crypto = require("crypto");
 const QRCode = require("qrcode");
 const { createRoute } = require("./src/routes");
 const { deviceLabelFromUserAgent, publicMobilePresence } = require("./src/sessions");
+const { createShareHelpers } = require("./src/share");
+const { imagePreviewContentType, normalizeUploadId, safeUploadId } = require("./src/uploads");
 const { sendZip } = require("./src/zip");
 
 const PORT = Number(process.env.PORT || 3000);
@@ -953,23 +955,6 @@ function uploadLocationLabel(targetPath) {
   }
 
   return targetPath;
-}
-
-function imagePreviewContentType(fileName) {
-  const extension = path.extname(String(fileName || "")).toLowerCase();
-  if (extension === ".jpg" || extension === ".jpeg") return "image/jpeg";
-  if (extension === ".png") return "image/png";
-  if (extension === ".webp") return "image/webp";
-  return null;
-}
-
-function safeUploadId(value) {
-  return normalizeUploadId(value) || crypto.randomUUID();
-}
-
-function normalizeUploadId(value) {
-  const id = String(value || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 96);
-  return id || null;
 }
 
 function partialUploadPath(session, id) {
@@ -1970,40 +1955,7 @@ async function handleShareCancel(req, res, url) {
   }
 }
 
-function shareFileInfo(session, file) {
-  const downloadParams = new URLSearchParams({
-    session: session.id,
-    id: file.id,
-    token: file.downloadToken
-  });
-
-  return {
-    id: file.id,
-    fileName: file.fileName,
-    size: file.size,
-    createdAt: file.createdAt,
-    downloadUrl: `/share/download?${downloadParams.toString()}`
-  };
-}
-
-function shareBundleDownloadUrl(session, bundle) {
-  const params = new URLSearchParams({
-    session: session.id,
-    bundle: bundle.id,
-    token: bundle.token
-  });
-
-  return `/share/download-bundle?${params.toString()}`;
-}
-
-function shareBundleZipName(files) {
-  const roots = files
-    .map((file) => String(file.fileName || "").split(/[\\/]/)[0])
-    .filter(Boolean);
-  const first = roots[0];
-  const sameRoot = first && roots.every((root) => root === first);
-  return `${sameRoot ? sanitizeFileName(first) : "arquivos"}-transferencia.zip`;
-}
+const { shareFileInfo, shareBundleDownloadUrl, shareBundleZipName } = createShareHelpers({ sanitizeFileName });
 
 function getSharedFileFromUrl(url) {
   const session = sessions.get(safeSessionId(url.searchParams.get("session")));
