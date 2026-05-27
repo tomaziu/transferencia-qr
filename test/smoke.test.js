@@ -107,7 +107,7 @@ test("GET / serves the desktop page", async () => {
   assert.match(body, /deviceList/);
   assert.match(body, /qrStatusText/);
   assert.match(body, /notifyButton/);
-  assert.match(body, /shareReadyToggleButton/);
+  assert.match(body, /shareReadyItems/);
 });
 
 test("GET /api/config returns QR and send URL", async () => {

@@ -31,6 +31,7 @@ const notifyButton = document.querySelector("#notifyButton");
 const emptyState = document.querySelector("#emptyState");
 const historyList = document.querySelector("#historyList");
 const historyCount = document.querySelector("#historyCount");
+const clearHistoryButton = document.querySelector("#clearHistoryButton");
 const downloadBundleButton = document.querySelector("#downloadBundleButton");
 const destinationBox = document.querySelector("#destinationBox");
 const currentDestination = document.querySelector("#currentDestination");
@@ -61,9 +62,7 @@ const shareResult = document.querySelector("#shareResult");
 const shareQrImage = document.querySelector("#shareQrImage");
 const shareReadyName = document.querySelector("#shareReadyName");
 const shareReadySize = document.querySelector("#shareReadySize");
-const shareReadyList = document.querySelector("#shareReadyList");
-const shareReadySummary = document.querySelector("#shareReadySummary");
-const shareReadyToggleButton = document.querySelector("#shareReadyToggleButton");
+
 const shareReadyItems = document.querySelector("#shareReadyItems");
 const shareLink = document.querySelector("#shareLink");
 const shareCopyButton = document.querySelector("#shareCopyButton");
@@ -72,11 +71,9 @@ const noteStatus = document.querySelector("#noteStatus");
 const noteCopyButton = document.querySelector("#noteCopyButton");
 
 const RECEIVER_SESSION_KEY = "transferenciaQrReceiverSession";
-const THEME_KEY = "transferenciaQrTheme";
 const NOTIFY_KEY = "transferenciaQrNotifyEnabled";
 const SHARE_CHUNK_SIZE = 1024 * 1024;
 const SHARE_MAX_RETRIES = 3;
-const SHARE_READY_LIMIT = 10;
 
 let currentFolder = null;
 let parentFolder = null;
@@ -94,7 +91,7 @@ let pinEnabled = true;
 let sessionCreatedAt = 0;
 let shareReadyFiles = [];
 let shareReadyTotalSize = 0;
-let shareReadyExpanded = false;
+
 let historyInitialized = false;
 let knownHistoryIds = new Set();
 let notifyEnabled = false;
@@ -121,30 +118,6 @@ function getReceiverSessionId() {
     return created;
   } catch {
     return createReceiverSessionId();
-  }
-}
-
-function preferredTheme() {
-  try {
-    const saved = localStorage.getItem(THEME_KEY);
-    if (saved === "dark" || saved === "light") return saved;
-  } catch {
-    // Theme persistence is optional.
-  }
-
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-function applyTheme(theme) {
-  const safeTheme = theme === "dark" ? "dark" : "light";
-  document.documentElement.dataset.theme = safeTheme;
-  themeToggle.textContent = safeTheme === "dark" ? "Tema claro" : "Tema escuro";
-  themeToggle.setAttribute("aria-pressed", String(safeTheme === "dark"));
-
-  try {
-    localStorage.setItem(THEME_KEY, safeTheme);
-  } catch {
-    // Ignore storage errors.
   }
 }
 
@@ -247,26 +220,6 @@ function createClientId() {
 
 function fileDisplayName(file) {
   return file.relativePath || file.webkitRelativePath || file.name;
-}
-
-function formatBytes(bytes) {
-  if (!bytes) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const value = bytes / Math.pow(1024, index);
-  return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
-}
-
-function formatTime(seconds) {
-  if (seconds == null || !Number.isFinite(seconds)) return "--";
-  if (seconds <= 1) return "menos de 1s";
-  const total = Math.ceil(seconds);
-  const minutes = Math.floor(total / 60);
-  const rest = total % 60;
-  if (minutes <= 0) return `${rest}s`;
-  if (minutes < 60) return `${minutes}min ${rest.toString().padStart(2, "0")}s`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ${(minutes % 60).toString().padStart(2, "0")}min`;
 }
 
 function formatSessionAge(timestamp) {
@@ -460,8 +413,11 @@ function renderHistory(items) {
     empty.className = "history-item";
     empty.innerHTML = "<strong>Nenhum arquivo recebido ainda</strong>";
     historyList.append(empty);
+    clearHistoryButton.hidden = true;
     return;
   }
+
+  clearHistoryButton.hidden = false;
 
   for (const item of items) {
     const duration = Number(item.duration || 0);
@@ -469,14 +425,23 @@ function renderHistory(items) {
     const finishedMeta = duration > 0
       ? `terminou em ${formatTime(duration)} · media ${formatBytes(averageSpeed)}/s`
       : "concluido";
-    const previewHtml = item.previewUrl
-      ? `<img class="history-preview" src="${escapeHtml(item.previewUrl)}" alt="Previa de ${escapeHtml(item.savedName)}" loading="lazy">`
-      : "";
+    const isImage = item.previewType && item.previewType.startsWith("image/");
+    const isVideo = item.previewType && item.previewType.startsWith("video/");
+    const isAudio = item.previewType && item.previewType.startsWith("audio/");
     const row = document.createElement("article");
-    row.className = `history-item${item.previewUrl ? " with-preview" : ""}`;
+    const previewHtml = item.previewUrl && isImage
+      ? `<img class="history-preview" src="${escapeHtml(item.previewUrl)}" alt="Previa de ${escapeHtml(item.savedName)}" loading="lazy">`
+      : isVideo
+        ? `<video class="history-preview media-preview" src="${escapeHtml(item.previewUrl)}" controls preload="metadata"></video>`
+        : "";
+    const mediaHtml = isAudio && item.previewUrl
+      ? `<audio class="audio-preview" src="${escapeHtml(item.previewUrl)}" controls preload="metadata"></audio>`
+      : "";
+    row.className = `history-item${item.previewUrl && isImage ? " with-preview" : ""}${isVideo ? " with-video-preview" : ""}`;
     row.innerHTML = `
       ${previewHtml}
       <div class="history-content">
+        ${mediaHtml}
         <header>
           <strong>${escapeHtml(item.savedName)}</strong>
           <div class="history-actions">
@@ -497,16 +462,6 @@ function renderHistory(items) {
     `;
     historyList.append(row);
   }
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;"
-  }[char]));
 }
 
 function folderIcon() {
@@ -854,15 +809,9 @@ function uploadShareChunk(id, file, offset, chunk, startedAt, baseOffset, queue 
 }
 
 function renderShareReadyFiles() {
-  const visibleFiles = shareReadyExpanded ? shareReadyFiles : shareReadyFiles.slice(0, SHARE_READY_LIMIT);
-  const hiddenCount = Math.max(0, shareReadyFiles.length - visibleFiles.length);
-
-  shareReadySummary.textContent = `${shareReadyFiles.length} arquivo${shareReadyFiles.length === 1 ? "" : "s"} · ${formatBytes(shareReadyTotalSize)}`;
-  shareReadyToggleButton.hidden = shareReadyFiles.length <= SHARE_READY_LIMIT;
-  shareReadyToggleButton.textContent = shareReadyExpanded ? "Recolher lista" : `Ver todos (${hiddenCount})`;
   shareReadyItems.innerHTML = "";
 
-  for (const file of visibleFiles) {
+  for (const file of shareReadyFiles) {
     const row = document.createElement("div");
     row.className = "share-ready-item";
 
@@ -885,14 +834,12 @@ function renderShareResult(data) {
 
   shareReadyFiles = files;
   shareReadyTotalSize = totalSize;
-  shareReadyExpanded = files.length <= SHARE_READY_LIMIT;
 
   shareResult.classList.remove("hidden");
   shareQrImage.src = data.qrCode;
   shareReadyName.textContent = files.length === 1 ? files[0].fileName : `${files.length} arquivos prontos`;
   shareReadySize.textContent = files.length === 1 ? formatBytes(files[0].size) : `${formatBytes(totalSize)} no total`;
   shareLink.value = data.shareUrl;
-  shareReadyList.classList.toggle("hidden", files.length <= 1);
   renderShareReadyFiles();
 }
 
@@ -1125,7 +1072,6 @@ function updateShareSelection(fileList, source, otherInput) {
   shareResult.classList.add("hidden");
   shareReadyFiles = [];
   shareReadyTotalSize = 0;
-  shareReadyExpanded = false;
   shareReadyItems.innerHTML = "";
   setShareControls(false);
 }
@@ -1262,11 +1208,6 @@ shareCopyButton.addEventListener("click", async () => {
   }, 1200);
 });
 
-shareReadyToggleButton.addEventListener("click", () => {
-  shareReadyExpanded = !shareReadyExpanded;
-  renderShareReadyFiles();
-});
-
 noteCopyButton.addEventListener("click", async () => {
   await copyTextToClipboard(sharedNote.value, sharedNote);
   setNoteStatus("Texto copiado");
@@ -1275,7 +1216,7 @@ noteCopyButton.addEventListener("click", async () => {
 
 themeToggle.addEventListener("click", () => {
   const currentTheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
-  applyTheme(currentTheme === "dark" ? "light" : "dark");
+  applyTheme(currentTheme === "dark" ? "light" : "dark", themeToggle);
 });
 
 notifyButton.addEventListener("click", async () => {
@@ -1324,6 +1265,11 @@ pinToggleButton.addEventListener("click", async () => {
   }
 });
 
+clearHistoryButton.addEventListener("click", () => {
+  if (!window.confirm("Limpar historico de recebidos? Os links de download serao perdidos.")) return;
+  fetch(sessionUrl("/api/history/clear"), { method: "POST" }).catch(() => {});
+});
+
 renewQrButton.addEventListener("click", () => {
   renewQrCode().catch((error) => showQrNotice(error.message || "Nao foi possivel renovar o QR Code"));
 });
@@ -1357,7 +1303,7 @@ folderPathInput.addEventListener("keydown", (event) => {
 });
 saveFolderButton.addEventListener("click", saveDestination);
 
-applyTheme(preferredTheme());
+applyTheme(preferredTheme(), themeToggle);
 notifyEnabled = loadNotifyPreference();
 updateNotifyButton();
 updateSessionStatus();

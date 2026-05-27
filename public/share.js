@@ -5,40 +5,6 @@ const downloadFileButton = document.querySelector("#downloadFileButton");
 const downloadList = document.querySelector("#downloadList");
 const downloadMessage = document.querySelector("#downloadMessage");
 const themeToggle = document.querySelector("#themeToggle");
-const THEME_KEY = "transferenciaQrTheme";
-
-function preferredTheme() {
-  try {
-    const saved = localStorage.getItem(THEME_KEY);
-    if (saved === "dark" || saved === "light") return saved;
-  } catch {
-    // Theme persistence is optional.
-  }
-
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-function applyTheme(theme) {
-  const safeTheme = theme === "dark" ? "dark" : "light";
-  document.documentElement.dataset.theme = safeTheme;
-  themeToggle.textContent = safeTheme === "dark" ? "Tema claro" : "Tema escuro";
-  themeToggle.setAttribute("aria-pressed", String(safeTheme === "dark"));
-
-  try {
-    localStorage.setItem(THEME_KEY, safeTheme);
-  } catch {
-    // Ignore storage errors.
-  }
-}
-
-function formatBytes(bytes) {
-  if (!bytes) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const value = bytes / Math.pow(1024, index);
-  return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
-}
-
 function normalizeFiles(data) {
   if (Array.isArray(data.files) && data.files.length) return data.files;
 
@@ -113,10 +79,10 @@ async function loadSharedFile() {
 
 themeToggle.addEventListener("click", () => {
   const currentTheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
-  applyTheme(currentTheme === "dark" ? "light" : "dark");
+  applyTheme(currentTheme === "dark" ? "light" : "dark", themeToggle);
 });
 
-applyTheme(preferredTheme());
+applyTheme(preferredTheme(), themeToggle);
 
 loadSharedFile().catch((error) => {
   shareStatus.textContent = "Indisponivel";

@@ -8,8 +8,14 @@ const QRCode = require("qrcode");
 const { createRoute } = require("./src/routes");
 const { deviceLabelFromUserAgent, publicMobilePresence } = require("./src/sessions");
 const { createShareHelpers } = require("./src/share");
-const { imagePreviewContentType, normalizeUploadId, safeUploadId } = require("./src/uploads");
+const { imagePreviewContentType, mediaPreviewContentType, detectPreviewType, normalizeUploadId, safeUploadId } = require("./src/uploads");
 const { sendZip } = require("./src/zip");
+const { createUploadHandlers } = require("./src/handlers/upload");
+const { createShareHandlers } = require("./src/handlers/share");
+const { createSessionHandlers } = require("./src/handlers/session");
+const { createDownloadHandlers } = require("./src/handlers/download");
+const { createAdminHandlers } = require("./src/handlers/admin");
+const { createNoteHandlers } = require("./src/handlers/note");
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = "0.0.0.0";
@@ -422,7 +428,8 @@ function publicHistoryItem(item) {
     completedAt: item.completedAt,
     location: item.location,
     downloadUrl: item.downloadUrl,
-    previewUrl: item.previewUrl || null
+    previewUrl: item.previewUrl || null,
+    previewType: item.previewUrl ? detectPreviewType(item.savedName || item.fileName) : null
   };
 }
 
@@ -553,249 +560,7 @@ async function listFolders(folderPath) {
   };
 }
 
-async function handleDestination(req, res) {
-  if (!requireLocalRequest(req, res)) return;
 
-  if (req.method === "GET") {
-    writeJson(res, 200, {
-      ok: true,
-      destinationDir: uploadDir,
-      defaultDir: DEFAULT_UPLOAD_DIR
-    });
-    return;
-  }
-
-  if (req.method !== "POST") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    return;
-  }
-
-  try {
-    const body = await readJsonBody(req);
-    const rawDestination = String(body.destinationDir || "").trim();
-
-    if (!rawDestination) throw new Error("Informe uma pasta valida");
-
-    const destinationDir = path.resolve(rawDestination);
-
-    await fsp.mkdir(destinationDir, { recursive: true });
-    const stat = await fsp.stat(destinationDir);
-    if (!stat.isDirectory()) throw new Error("O caminho informado nao e uma pasta");
-
-    uploadDir = destinationDir;
-    await saveSettings();
-
-    writeJson(res, 200, {
-      ok: true,
-      destinationDir: uploadDir
-    });
-  } catch (error) {
-    writeJson(res, 400, {
-      ok: false,
-      error: error.message || "Nao foi possivel salvar a pasta"
-    });
-  }
-}
-
-async function handleFolders(req, res, url) {
-  if (!requireLocalRequest(req, res)) return;
-
-  try {
-    writeJson(res, 200, {
-      ok: true,
-      ...(await listFolders(url.searchParams.get("path")))
-    });
-  } catch (error) {
-    writeJson(res, 400, {
-      ok: false,
-      error: error.message || "Nao foi possivel abrir esta pasta"
-    });
-  }
-}
-
-async function handleNote(req, res, url) {
-  const session = sessionFromKeyOrId(req, url, { requireMobileAuth: true });
-  if (!session) {
-    const expired = url.searchParams.has("key") && !sessionByKey(url);
-    writeJson(res, 403, {
-      ok: false,
-      expired,
-      pinRequired: !expired && url.searchParams.has("key"),
-      error: expired ? EXPIRED_QR_MESSAGE : PIN_REQUIRED_MESSAGE
-    });
-    req.resume();
-    return;
-  }
-
-  if (req.method === "GET") {
-    writeJson(res, 200, {
-      ok: true,
-      note: publicState(session).note
-    });
-    return;
-  }
-
-  if (req.method !== "POST") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    req.resume();
-    return;
-  }
-
-  try {
-    const body = await readJsonBody(req, 64 * 1024);
-    const text = String(body.text || "").slice(0, NOTE_MAX_LENGTH);
-
-    session.noteText = text;
-    session.noteUpdatedAt = Date.now();
-    touchSession(session);
-    broadcastState(session);
-
-    writeJson(res, 200, {
-      ok: true,
-      note: publicState(session).note
-    });
-  } catch (error) {
-    writeJson(res, 400, {
-      ok: false,
-      error: error.message || "Nao foi possivel salvar a anotacao"
-    });
-  }
-}
-
-async function handlePinVerify(req, res, url) {
-  const session = sessionByKey(url);
-  if (!session) {
-    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
-    req.resume();
-    return;
-  }
-
-  if (req.method !== "POST") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    req.resume();
-    return;
-  }
-
-  try {
-    if (!session.pinEnabled) {
-      const auth = createMobileAuthToken();
-      session.mobileAuthTokens.set(auth, {
-        createdAt: Date.now(),
-        lastSeen: Date.now(),
-        label: deviceLabelFromUserAgent(req.headers["user-agent"])
-      });
-      touchSession(session);
-      writeJson(res, 200, { ok: true, auth, pinEnabled: false, note: publicState(session).note });
-      return;
-    }
-
-    const body = await readJsonBody(req);
-    const pin = String(body.pin || "").replace(/\D/g, "");
-
-    if (pin !== session.pin) {
-      writeJson(res, 403, { ok: false, error: "PIN incorreto. Confira o codigo no computador." });
-      return;
-    }
-
-    const auth = createMobileAuthToken();
-    session.mobileAuthTokens.set(auth, {
-      createdAt: Date.now(),
-      lastSeen: Date.now(),
-      label: deviceLabelFromUserAgent(req.headers["user-agent"])
-    });
-    touchSession(session);
-
-    writeJson(res, 200, {
-      ok: true,
-      auth,
-      note: publicState(session).note
-    });
-  } catch (error) {
-    writeJson(res, 400, {
-      ok: false,
-      error: error.message || "Nao foi possivel validar o PIN"
-    });
-  }
-}
-
-function handlePinStatus(req, res, url) {
-  const session = sessionByKey(url);
-  if (!session) {
-    writeJson(res, 403, { ok: false, expired: true, error: EXPIRED_QR_MESSAGE });
-    req.resume();
-    return;
-  }
-
-  const verified = hasValidMobileAuth(session, mobileAuthTokenFromRequest(req, url));
-  writeJson(res, 200, {
-    ok: true,
-    verified,
-    pinEnabled: session.pinEnabled,
-    note: verified ? publicState(session).note : null
-  });
-}
-
-async function handleSessionRenew(req, res, url) {
-  if (req.method !== "POST") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    req.resume();
-    return;
-  }
-
-  const session = getOrCreateSession(url.searchParams.get("session"));
-  renewSessionAccess(session);
-  const config = await getConfig(req, session);
-  broadcastState(session);
-
-  writeJson(res, 200, {
-    ok: true,
-    ...config,
-    state: publicState(session)
-  });
-}
-
-async function handleSessionEnd(req, res, url) {
-  if (req.method !== "POST") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    req.resume();
-    return;
-  }
-
-  const session = getOrCreateSession(url.searchParams.get("session"));
-  disconnectMobileClients(session, "Sessao encerrada no computador. Escaneie um novo QR Code.");
-  await clearSessionData(session, {
-    clearNote: true,
-    deleteReceivedFiles: isHostedEnvironment()
-  });
-  renewSessionAccess(session);
-  const config = await getConfig(req, session);
-  broadcastState(session);
-
-  writeJson(res, 200, {
-    ok: true,
-    ...config,
-    state: publicState(session)
-  });
-}
-
-async function handleHistoryClear(req, res, url) {
-  if (req.method !== "POST" && req.method !== "DELETE") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    req.resume();
-    return;
-  }
-
-  const session = getOrCreateSession(url.searchParams.get("session"));
-  await clearCompletedHistory(session, {
-    deleteReceivedFiles: isHostedEnvironment()
-  });
-  broadcastState(session);
-
-  writeJson(res, 200, {
-    ok: true,
-    state: publicState(session)
-  });
-}
 
 function sendSseState(res, session) {
   res.write(`event: state\ndata: ${JSON.stringify(publicState(session))}\n\n`);
@@ -837,34 +602,6 @@ function disconnectMobileClients(session, message) {
   }
 
   session.mobileClients.clear();
-}
-
-async function handlePinToggle(req, res, url) {
-  if (!requireLocalRequest(req, res)) return;
-
-  if (req.method !== "POST") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    req.resume();
-    return;
-  }
-
-  const session = getOrCreateSession(url.searchParams.get("session"));
-  session.pinEnabled = !session.pinEnabled;
-  session.configCache = null;
-  touchSession(session);
-
-  if (session.pinEnabled) {
-    renewSessionAccess(session);
-  }
-
-  const config = await getConfig(req, session);
-  broadcastState(session);
-
-  writeJson(res, 200, {
-    ok: true,
-    ...config,
-    state: publicState(session)
-  });
 }
 
 function renewSessionAccess(session) {
@@ -957,7 +694,7 @@ function uploadLocationLabel(targetPath) {
   return targetPath;
 }
 
-function partialUploadPath(session, id) {
+function uploadPartialPath(session, id) {
   return path.join(uploadDir, `.upload-${safeSessionId(session.id)}-${safeUploadId(id)}.part`);
 }
 
@@ -986,7 +723,7 @@ async function removeUploadFiles(session, id) {
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const results = await Promise.allSettled([
-      fsp.rm(partialUploadPath(session, id), { force: true }),
+      fsp.rm(uploadPartialPath(session, id), { force: true }),
       fsp.rm(uploadMetaPath(session, id), { force: true })
     ]);
     const failed = results.find((result) => result.status === "rejected");
@@ -1050,7 +787,7 @@ function removeSharedFileFromBundles(session, fileId) {
 function rememberCompletedUpload(session, { id, fileName, savedName, targetPath, size, duration, completedAt }) {
   const downloadToken = crypto.randomBytes(16).toString("hex");
   const downloadUrl = `/download?session=${encodeURIComponent(session.id)}&id=${encodeURIComponent(id)}&token=${downloadToken}`;
-  const previewUrl = imagePreviewContentType(savedName || fileName)
+  const previewUrl = detectPreviewType(savedName || fileName)
     ? `${downloadUrl}&preview=1`
     : null;
 
@@ -1130,963 +867,110 @@ function requireUploadSession(req, res, url, { json = true } = {}) {
   return null;
 }
 
-async function handleUpload(req, res, url) {
-  const session = requireUploadSession(req, res, url, { json: false });
-  if (!session) return;
+// --- Handler instances from modules ---
+const { handleUpload, handleUploadStart, handleUploadStatus, handleUploadCancel, handleUploadChunk, handleUploadFinish } = createUploadHandlers({
+  writeJson,
+  serveText,
+  broadcastState,
+  getOrCreateSession,
+  requireUploadSession,
+  sessionByKey,
+  sessions,
+  uploadDir,
+  CHUNK_SIZE,
+  uniqueUploadPath,
+  relativeDisplayPath,
+  rememberCompletedUpload,
+  formatPublicTransfer,
+  publicState,
+  uploadPartialPath,
+  uploadMetaPath,
+  readUploadMeta,
+  writeUploadMeta,
+  removeUploadFiles,
+  readJsonBody,
+  sanitizeRelativeFilePath
+});
+
+const shareDeps = createShareHelpers({ sanitizeFileName });
+
+const { handleShareStart, handleShareStatus, handleShareChunk, handleShareFinish, handleShareBundle, handleShareCancel, handleShareInfo, handleShareBundleDownload, handleShareDownload } = createShareHandlers({
+  writeJson,
+  serveText,
+  readJsonBody,
+  getOrCreateSession,
+  uploadDir,
+  CHUNK_SIZE,
+  touchSession,
+  safeSessionId,
+  sessions,
+  sanitizeFileName,
+  sanitizeRelativeFilePath,
+  contentDisposition,
+  sharePartialPath,
+  shareMetaPath,
+  shareStoredPath,
+  readShareMeta,
+  writeShareMeta,
+  removeShareFiles,
+  removeSharedFileFromBundles,
+  shareFileInfo: shareDeps.shareFileInfo,
+  shareBundleDownloadUrl: shareDeps.shareBundleDownloadUrl,
+  shareBundleZipName: shareDeps.shareBundleZipName,
+  shareUrlForRequest,
+  shareBundleUrlForRequest
+});
+
+const { handlePinVerify, handlePinStatus, handlePinToggle, handleSessionRenew, handleSessionEnd, handleHistoryClear } = createSessionHandlers({
+  writeJson,
+  readJsonBody,
+  getOrCreateSession,
+  sessionByKey,
+  sessionFromKeyOrId,
+  getConfig,
+  broadcastState,
+  sendSseState,
+  renewSessionAccess,
+  clearSessionData,
+  clearCompletedHistory,
+  isHostedEnvironment,
+  disconnectMobileClients,
+  deviceLabelFromUserAgent,
+  publicState,
+  requireLocalRequest,
+  hasValidMobileAuth,
+  mobileAuthTokenFromRequest,
+  createMobileAuthToken,
+  touchSession
+});
+
+const { handleDownload, handleDownloadBundle } = createDownloadHandlers({
+  serveText,
+  sessions,
+  contentDisposition,
+  safeSessionId
+});
+
+const { handleDestination, handleFolders } = createAdminHandlers({
+  writeJson,
+  readJsonBody,
+  requireLocalRequest,
+  uploadDir,
+  DEFAULT_UPLOAD_DIR,
+  saveSettings
+});
+
+const { handleNote } = createNoteHandlers({
+  writeJson,
+  readJsonBody,
+  sessionFromKeyOrId,
+  sessionByKey,
+  broadcastState,
+  publicState,
+  NOTE_MAX_LENGTH,
+  touchSession
+});
 
-  if (req.method !== "POST") {
-    serveText(res, 405, "Metodo nao permitido");
-    req.resume();
-    return;
-  }
-
-  const id = safeUploadId(url.searchParams.get("id") || crypto.randomUUID());
-  const fileName = sanitizeRelativeFilePath(req.headers["x-file-name"]);
-  const size = Number(req.headers["content-length"] || 0);
-  const targetPath = await uniqueUploadPath(fileName);
-  const savedName = relativeDisplayPath(targetPath);
-  const transfer = {
-    id,
-    fileName,
-    savedName,
-    size,
-    received: 0,
-    status: "receiving",
-    error: null,
-    startedAt: Date.now()
-  };
-
-  session.activeTransfers.set(id, transfer);
-  broadcastState(session);
-
-  let lastBroadcast = 0;
-  let finished = false;
-  const output = fs.createWriteStream(targetPath, { flags: "wx" });
-
-  function fail(message) {
-    if (finished) return;
-    finished = true;
-    transfer.status = "error";
-    transfer.error = message;
-    broadcastState(session);
-    output.destroy();
-    fsp.unlink(targetPath).catch(() => {});
-    if (!res.headersSent) serveText(res, 500, message);
-    setTimeout(() => {
-      session.activeTransfers.delete(id);
-      broadcastState(session);
-    }, 6000);
-  }
-
-  req.on("data", (chunk) => {
-    transfer.received += chunk.length;
-    const now = Date.now();
-    if (now - lastBroadcast > 250) {
-      lastBroadcast = now;
-      broadcastState(session);
-    }
-  });
-
-  req.on("aborted", () => fail("Envio cancelado"));
-  req.on("error", () => fail("Erro ao receber arquivo"));
-  output.on("error", () => fail("Erro ao salvar arquivo"));
-
-  output.on("finish", () => {
-    if (finished) return;
-    finished = true;
-
-    transfer.status = "complete";
-    transfer.received = size || transfer.received;
-    const completedAt = Date.now();
-    const duration = Math.max(0.001, (completedAt - transfer.startedAt) / 1000);
-    const downloadUrl = rememberCompletedUpload(session, {
-      id,
-      fileName,
-      savedName,
-      size: transfer.received,
-      duration,
-      completedAt,
-      targetPath
-    });
-
-    writeJson(res, 200, {
-      ok: true,
-      fileName,
-      savedName,
-      size: transfer.received,
-      duration,
-      downloadUrl
-    });
-    broadcastState(session);
-
-    setTimeout(() => {
-      session.activeTransfers.delete(id);
-      broadcastState(session);
-    }, 5000);
-  });
-
-  req.pipe(output);
-}
-
-async function handleUploadStart(req, res, url) {
-  const session = requireUploadSession(req, res, url);
-  if (!session) return;
-
-  if (req.method !== "POST") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    req.resume();
-    return;
-  }
-
-  try {
-    const body = await readJsonBody(req);
-    const id = safeUploadId(body.id);
-    const fileName = sanitizeRelativeFilePath(body.fileName);
-    const size = Math.max(0, Number(body.size || 0));
-    const existing = session.completedFiles.get(id);
-
-    if (existing) {
-      writeJson(res, 200, {
-        ok: true,
-        id,
-        complete: true,
-        received: size,
-        chunkSize: CHUNK_SIZE
-      });
-      return;
-    }
-
-    await fsp.mkdir(uploadDir, { recursive: true });
-
-    let meta = null;
-    try {
-      meta = await readUploadMeta(session, id);
-    } catch {
-      meta = null;
-    }
-
-    if (!meta || meta.size !== size || meta.fileName !== fileName) {
-      meta = {
-        id,
-        sessionId: session.id,
-        fileName,
-        size,
-        createdAt: Date.now(),
-        startedAt: Date.now()
-      };
-      await writeUploadMeta(session, meta);
-      await fsp.rm(partialUploadPath(session, id), { force: true });
-    }
-
-    const handle = await fsp.open(partialUploadPath(session, id), "a");
-    await handle.close();
-
-    const received = (await fsp.stat(partialUploadPath(session, id))).size;
-    session.activeTransfers.set(id, {
-      id,
-      fileName,
-      savedName: fileName,
-      size,
-      received,
-      status: "receiving",
-      error: null,
-      startedAt: meta.startedAt || Date.now()
-    });
-    broadcastState(session);
-
-    writeJson(res, 200, {
-      ok: true,
-      id,
-      received,
-      chunkSize: CHUNK_SIZE
-    });
-  } catch (error) {
-    writeJson(res, 400, {
-      ok: false,
-      error: error.message || "Nao foi possivel iniciar o envio"
-    });
-  }
-}
-
-async function handleUploadStatus(req, res, url) {
-  const session = requireUploadSession(req, res, url);
-  if (!session) return;
-
-  const id = safeUploadId(url.searchParams.get("id"));
-  const complete = session.completedFiles.has(id);
-
-  try {
-    const meta = complete ? null : await readUploadMeta(session, id);
-    const received = complete
-      ? session.completedFiles.get(id).size || 0
-      : (await fsp.stat(partialUploadPath(session, id))).size;
-
-    writeJson(res, 200, {
-      ok: true,
-      id,
-      complete,
-      received,
-      size: meta ? meta.size : received
-    });
-  } catch {
-    writeJson(res, 200, {
-      ok: true,
-      id,
-      complete: false,
-      received: 0,
-      size: 0
-    });
-  }
-}
-
-async function handleUploadCancel(req, res, url) {
-  const session = requireUploadSession(req, res, url);
-  if (!session) return;
-
-  if (req.method !== "POST" && req.method !== "DELETE") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    req.resume();
-    return;
-  }
-
-  try {
-    const body = req.method === "POST" ? await readJsonBody(req) : {};
-    const id = safeUploadId(body.id || url.searchParams.get("id"));
-
-    await removeUploadFiles(session, id);
-
-    session.activeTransfers.delete(id);
-    broadcastState(session);
-
-    writeJson(res, 200, {
-      ok: true,
-      id,
-      cancelled: true
-    });
-  } catch (error) {
-    writeJson(res, 400, {
-      ok: false,
-      error: error.message || "Nao foi possivel descartar o envio"
-    });
-  }
-}
-
-async function handleUploadChunk(req, res, url) {
-  const session = requireUploadSession(req, res, url);
-  if (!session) return;
-
-  if (req.method !== "POST") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    req.resume();
-    return;
-  }
-
-  const id = safeUploadId(url.searchParams.get("id"));
-  const offset = Math.max(0, Number(url.searchParams.get("offset") || 0));
-
-  let meta = null;
-  try {
-    meta = await readUploadMeta(session, id);
-  } catch {
-    writeJson(res, 404, { ok: false, error: "Envio nao iniciado", received: 0 });
-    req.resume();
-    return;
-  }
-
-  const partialPath = partialUploadPath(session, id);
-  const currentSize = (await fsp.stat(partialPath).catch(() => ({ size: 0 }))).size;
-
-  if (offset !== currentSize) {
-    writeJson(res, 409, {
-      ok: false,
-      error: "Offset fora de sincronia",
-      received: currentSize
-    });
-    req.resume();
-    return;
-  }
-
-  const transfer = session.activeTransfers.get(id) || {
-    id,
-    fileName: meta.fileName,
-    savedName: meta.fileName,
-    size: meta.size,
-    received: currentSize,
-    status: "receiving",
-    error: null,
-    startedAt: meta.startedAt || Date.now()
-  };
-  transfer.status = "receiving";
-  transfer.error = null;
-  session.activeTransfers.set(id, transfer);
-
-  let received = currentSize;
-  let lastBroadcast = 0;
-  let finished = false;
-  const output = fs.createWriteStream(partialPath, { flags: "r+", start: currentSize });
-
-  function fail(message) {
-    if (finished) return;
-    finished = true;
-    transfer.status = "paused";
-    transfer.error = message;
-    broadcastState(session);
-    output.destroy();
-    if (!res.headersSent) {
-      writeJson(res, 500, { ok: false, error: message, received });
-    }
-  }
-
-  req.on("data", (chunk) => {
-    received += chunk.length;
-    transfer.received = Math.min(received, meta.size);
-    if (received > meta.size) {
-      fail("Arquivo maior que o esperado");
-      req.destroy();
-      return;
-    }
-    const now = Date.now();
-    if (now - lastBroadcast > 250) {
-      lastBroadcast = now;
-      broadcastState(session);
-    }
-  });
-
-  req.on("aborted", () => fail("Envio pausado"));
-  req.on("error", () => fail("Erro de rede"));
-  output.on("error", () => fail("Erro ao salvar parte do arquivo"));
-
-  output.on("finish", () => {
-    if (finished) return;
-    finished = true;
-    transfer.received = Math.min(received, meta.size);
-    broadcastState(session);
-    writeJson(res, 200, {
-      ok: true,
-      id,
-      received: transfer.received
-    });
-  });
-
-  req.pipe(output);
-}
-
-async function handleUploadFinish(req, res, url) {
-  const session = requireUploadSession(req, res, url);
-  if (!session) return;
-
-  if (req.method !== "POST") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    req.resume();
-    return;
-  }
-
-  try {
-    const body = await readJsonBody(req);
-    const id = safeUploadId(body.id || url.searchParams.get("id"));
-    const meta = await readUploadMeta(session, id);
-    const partialPath = partialUploadPath(session, id);
-    const stat = await fsp.stat(partialPath);
-
-    if (stat.size < meta.size) {
-      writeJson(res, 409, {
-        ok: false,
-        error: "Arquivo ainda incompleto",
-        received: stat.size
-      });
-      return;
-    }
-
-    const targetPath = await uniqueUploadPath(meta.fileName);
-    await fsp.rename(partialPath, targetPath);
-    await fsp.rm(uploadMetaPath(session, id), { force: true });
-
-    const savedName = relativeDisplayPath(targetPath);
-    const completedAt = Date.now();
-    const startedAt = meta.startedAt || meta.createdAt || completedAt;
-    const duration = Math.max(0.001, (completedAt - startedAt) / 1000);
-    const transfer = session.activeTransfers.get(id) || {
-      id,
-      fileName: meta.fileName,
-      savedName,
-      size: meta.size,
-      received: stat.size,
-      status: "complete",
-      error: null,
-      startedAt
-    };
-
-    transfer.savedName = savedName;
-    transfer.received = stat.size;
-    transfer.status = "complete";
-    transfer.error = null;
-
-    const downloadUrl = rememberCompletedUpload(session, {
-      id,
-      fileName: meta.fileName,
-      savedName,
-      targetPath,
-      size: stat.size,
-      duration,
-      completedAt
-    });
-
-    session.activeTransfers.set(id, transfer);
-    broadcastState(session);
-
-    setTimeout(() => {
-      session.activeTransfers.delete(id);
-      broadcastState(session);
-    }, 5000);
-
-    writeJson(res, 200, {
-      ok: true,
-      id,
-      fileName: meta.fileName,
-      savedName,
-      size: stat.size,
-      duration,
-      downloadUrl
-    });
-  } catch (error) {
-    writeJson(res, 400, {
-      ok: false,
-      error: error.message || "Nao foi possivel finalizar o envio"
-    });
-  }
-}
-
-async function handleDownload(req, res, url) {
-  if (req.method !== "GET") {
-    serveText(res, 405, "Metodo nao permitido");
-    return;
-  }
-
-  const id = url.searchParams.get("id");
-  const token = url.searchParams.get("token");
-  const session = sessions.get(safeSessionId(url.searchParams.get("session")));
-  const file = session?.completedFiles.get(id);
-
-  if (!file || file.downloadToken !== token) {
-    serveText(res, 404, "Arquivo nao encontrado");
-    return;
-  }
-
-  try {
-    const stat = await fsp.stat(file.targetPath);
-    if (!stat.isFile()) throw new Error("Arquivo indisponivel");
-
-    const previewType = url.searchParams.get("preview") === "1"
-      ? imagePreviewContentType(file.savedName || file.fileName)
-      : null;
-
-    res.writeHead(200, {
-      "content-type": previewType || "application/octet-stream",
-      "content-length": stat.size,
-      "content-disposition": previewType ? "inline" : contentDisposition(file.savedName),
-      "cache-control": "no-store"
-    });
-
-    fs.createReadStream(file.targetPath).pipe(res);
-  } catch {
-    serveText(res, 404, "Arquivo indisponivel");
-  }
-}
-
-async function handleDownloadBundle(req, res, url) {
-  if (req.method !== "GET") {
-    serveText(res, 405, "Metodo nao permitido");
-    return;
-  }
-
-  const session = sessions.get(safeSessionId(url.searchParams.get("session")));
-  if (!session) {
-    serveText(res, 404, "Sessao nao encontrada");
-    return;
-  }
-
-  const ids = (url.searchParams.get("ids") || "").split(",").filter(Boolean);
-  const tokens = (url.searchParams.get("tokens") || "").split(",").filter(Boolean);
-
-  if (!ids.length || ids.length !== tokens.length) {
-    serveText(res, 400, "Parametros invalidos");
-    return;
-  }
-
-  const files = [];
-  for (let i = 0; i < ids.length; i += 1) {
-    const file = session.completedFiles.get(ids[i]);
-    if (!file || file.downloadToken !== tokens[i]) {
-      serveText(res, 404, "Um ou mais arquivos nao encontrados");
-      return;
-    }
-    files.push({ fileName: file.savedName, targetPath: file.targetPath });
-  }
-
-  try {
-    const zipName = files.length === 1 ? path.basename(files[0].fileName, path.extname(files[0].fileName)) + ".zip" : "arquivos-transferencia.zip";
-    await sendZip(res, zipName, files);
-  } catch (error) {
-    if (!res.headersSent) {
-      serveText(res, 500, error.message || "Erro ao gerar ZIP");
-    }
-  }
-}
-
-async function handleShareStart(req, res, url) {
-  const session = getOrCreateSession(url.searchParams.get("session"));
-
-  if (req.method !== "POST") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    req.resume();
-    return;
-  }
-
-  try {
-    const body = await readJsonBody(req);
-    const id = safeUploadId(body.id);
-    const fileName = sanitizeRelativeFilePath(body.fileName);
-    const size = Math.max(0, Number(body.size || 0));
-    const meta = {
-      id,
-      sessionId: session.id,
-      fileName,
-      size,
-      downloadToken: crypto.randomBytes(18).toString("hex"),
-      createdAt: Date.now(),
-      startedAt: Date.now()
-    };
-
-    await fsp.mkdir(uploadDir, { recursive: true });
-    await removeShareFiles(session, id, session.sharedFiles.get(id)?.targetPath);
-    session.sharedFiles.delete(id);
-    removeSharedFileFromBundles(session, id);
-    await writeShareMeta(session, meta);
-
-    const handle = await fsp.open(sharePartialPath(session, id), "a");
-    await handle.close();
-
-    writeJson(res, 200, {
-      ok: true,
-      id,
-      received: 0,
-      chunkSize: CHUNK_SIZE
-    });
-  } catch (error) {
-    writeJson(res, 400, {
-      ok: false,
-      error: error.message || "Nao foi possivel preparar o arquivo"
-    });
-  }
-}
-
-async function handleShareStatus(req, res, url) {
-  const session = getOrCreateSession(url.searchParams.get("session"));
-  const id = safeUploadId(url.searchParams.get("id"));
-  const shared = session.sharedFiles.get(id);
-
-  if (shared) {
-    writeJson(res, 200, {
-      ok: true,
-      id,
-      complete: true,
-      received: shared.size,
-      size: shared.size
-    });
-    return;
-  }
-
-  try {
-    const meta = await readShareMeta(session, id);
-    const received = (await fsp.stat(sharePartialPath(session, id))).size;
-
-    writeJson(res, 200, {
-      ok: true,
-      id,
-      complete: false,
-      received,
-      size: meta.size
-    });
-  } catch {
-    writeJson(res, 200, {
-      ok: true,
-      id,
-      complete: false,
-      received: 0,
-      size: 0
-    });
-  }
-}
-
-async function handleShareChunk(req, res, url) {
-  const session = getOrCreateSession(url.searchParams.get("session"));
-
-  if (req.method !== "POST") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    req.resume();
-    return;
-  }
-
-  const id = safeUploadId(url.searchParams.get("id"));
-  const offset = Math.max(0, Number(url.searchParams.get("offset") || 0));
-
-  let meta = null;
-  try {
-    meta = await readShareMeta(session, id);
-  } catch {
-    writeJson(res, 404, { ok: false, error: "Compartilhamento nao iniciado", received: 0 });
-    req.resume();
-    return;
-  }
-
-  const partialPath = sharePartialPath(session, id);
-  const currentSize = (await fsp.stat(partialPath).catch(() => ({ size: 0 }))).size;
-
-  if (offset !== currentSize) {
-    writeJson(res, 409, {
-      ok: false,
-      error: "Offset fora de sincronia",
-      received: currentSize
-    });
-    req.resume();
-    return;
-  }
-
-  let received = currentSize;
-  let finished = false;
-  const output = fs.createWriteStream(partialPath, { flags: "r+", start: currentSize });
-
-  function fail(message) {
-    if (finished) return;
-    finished = true;
-    output.destroy();
-    if (!res.headersSent) {
-      writeJson(res, 500, { ok: false, error: message, received });
-    }
-  }
-
-  req.on("data", (chunk) => {
-    received += chunk.length;
-    if (received > meta.size) {
-      fail("Arquivo maior que o esperado");
-      req.destroy();
-    }
-  });
-
-  req.on("aborted", () => fail("Envio pausado"));
-  req.on("error", () => fail("Erro de rede"));
-  output.on("error", () => fail("Erro ao salvar parte do arquivo"));
-
-  output.on("finish", () => {
-    if (finished) return;
-    finished = true;
-    writeJson(res, 200, {
-      ok: true,
-      id,
-      received: Math.min(received, meta.size)
-    });
-  });
-
-  req.pipe(output);
-}
-
-async function handleShareFinish(req, res, url) {
-  const session = getOrCreateSession(url.searchParams.get("session"));
-
-  if (req.method !== "POST") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    req.resume();
-    return;
-  }
-
-  try {
-    const body = await readJsonBody(req);
-    const id = safeUploadId(body.id || url.searchParams.get("id"));
-    const meta = await readShareMeta(session, id);
-    const partialPath = sharePartialPath(session, id);
-    const stat = await fsp.stat(partialPath);
-
-    if (stat.size < meta.size) {
-      writeJson(res, 409, {
-        ok: false,
-        error: "Arquivo ainda incompleto",
-        received: stat.size
-      });
-      return;
-    }
-
-    const targetPath = shareStoredPath(session, id);
-    await fsp.rm(targetPath, { force: true });
-    await fsp.rename(partialPath, targetPath);
-    await fsp.rm(shareMetaPath(session, id), { force: true });
-
-    const sharedFile = {
-      id,
-      fileName: meta.fileName,
-      savedName: meta.fileName,
-      targetPath,
-      size: stat.size,
-      downloadToken: meta.downloadToken,
-      createdAt: meta.createdAt || Date.now()
-    };
-    const shareUrl = shareUrlForRequest(req, session, sharedFile);
-    const qrCode = await QRCode.toDataURL(shareUrl, {
-      errorCorrectionLevel: "M",
-      margin: 1,
-      scale: 8,
-      color: {
-        dark: "#102030",
-        light: "#ffffff"
-      }
-    });
-
-    session.sharedFiles.set(id, sharedFile);
-
-    writeJson(res, 200, {
-      ok: true,
-      id,
-      fileName: sharedFile.fileName,
-      size: sharedFile.size,
-      shareUrl,
-      qrCode
-    });
-  } catch (error) {
-    writeJson(res, 400, {
-      ok: false,
-      error: error.message || "Nao foi possivel gerar o download"
-    });
-  }
-}
-
-async function handleShareBundle(req, res, url) {
-  const session = getOrCreateSession(url.searchParams.get("session"));
-
-  if (req.method !== "POST") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    req.resume();
-    return;
-  }
-
-  try {
-    const body = await readJsonBody(req);
-    const ids = Array.isArray(body.ids)
-      ? body.ids.map(normalizeUploadId).filter(Boolean)
-      : [];
-
-    if (ids.length === 0) {
-      writeJson(res, 400, { ok: false, error: "Nenhum arquivo informado" });
-      return;
-    }
-
-    const files = ids.map((id) => session.sharedFiles.get(id));
-    if (files.some((file) => !file)) {
-      writeJson(res, 404, { ok: false, error: "Um ou mais arquivos nao estao disponiveis" });
-      return;
-    }
-
-    const bundle = {
-      id: crypto.randomBytes(12).toString("hex"),
-      token: crypto.randomBytes(18).toString("hex"),
-      fileIds: ids,
-      createdAt: Date.now()
-    };
-    const shareUrl = shareBundleUrlForRequest(req, session, bundle);
-    const qrCode = await QRCode.toDataURL(shareUrl, {
-      errorCorrectionLevel: "M",
-      margin: 1,
-      scale: 8,
-      color: {
-        dark: "#102030",
-        light: "#ffffff"
-      }
-    });
-
-    session.shareBundles.set(bundle.id, bundle);
-
-    writeJson(res, 200, {
-      ok: true,
-      mode: "bundle",
-      bundleId: bundle.id,
-      fileName: `${files.length} arquivos`,
-      size: files.reduce((total, file) => total + file.size, 0),
-      totalSize: files.reduce((total, file) => total + file.size, 0),
-      fileCount: files.length,
-      files: files.map((file) => shareFileInfo(session, file)),
-      zipDownloadUrl: shareBundleDownloadUrl(session, bundle),
-      shareUrl,
-      qrCode
-    });
-  } catch (error) {
-    writeJson(res, 400, {
-      ok: false,
-      error: error.message || "Nao foi possivel gerar o pacote de arquivos"
-    });
-  }
-}
-
-async function handleShareCancel(req, res, url) {
-  const session = getOrCreateSession(url.searchParams.get("session"));
-
-  if (req.method !== "POST" && req.method !== "DELETE") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    req.resume();
-    return;
-  }
-
-  try {
-    const body = req.method === "POST" ? await readJsonBody(req) : {};
-    const id = safeUploadId(body.id || url.searchParams.get("id"));
-    const shared = session.sharedFiles.get(id);
-
-    await removeShareFiles(session, id, shared?.targetPath);
-    session.sharedFiles.delete(id);
-    removeSharedFileFromBundles(session, id);
-
-    writeJson(res, 200, {
-      ok: true,
-      id,
-      cancelled: true
-    });
-  } catch (error) {
-    writeJson(res, 400, {
-      ok: false,
-      error: error.message || "Nao foi possivel cancelar o compartilhamento"
-    });
-  }
-}
-
-const { shareFileInfo, shareBundleDownloadUrl, shareBundleZipName } = createShareHelpers({ sanitizeFileName });
-
-function getSharedFileFromUrl(url) {
-  const session = sessions.get(safeSessionId(url.searchParams.get("session")));
-  const id = normalizeUploadId(url.searchParams.get("id"));
-  const token = String(url.searchParams.get("token") || "");
-  const file = session?.sharedFiles.get(id);
-
-  if (!session || !file || file.downloadToken !== token) return null;
-
-  touchSession(session);
-  return { session, file };
-}
-
-function getShareBundleFromUrl(url) {
-  const session = sessions.get(safeSessionId(url.searchParams.get("session")));
-  const id = normalizeUploadId(url.searchParams.get("bundle"));
-  const token = String(url.searchParams.get("token") || "");
-  const bundle = session?.shareBundles.get(id);
-
-  if (!session || !bundle || bundle.token !== token) return null;
-
-  const files = bundle.fileIds.map((fileId) => session.sharedFiles.get(fileId));
-  if (files.some((file) => !file)) return null;
-
-  touchSession(session);
-  return { session, bundle, files };
-}
-
-async function handleShareInfo(req, res, url) {
-  if (req.method !== "GET") {
-    writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
-    return;
-  }
-
-  if (url.searchParams.has("bundle")) {
-    const bundleMatch = getShareBundleFromUrl(url);
-    if (!bundleMatch) {
-      writeJson(res, 404, { ok: false, error: "Arquivos indisponiveis ou link expirado" });
-      return;
-    }
-
-    const { session, bundle, files } = bundleMatch;
-    const totalSize = files.reduce((total, file) => total + file.size, 0);
-
-    writeJson(res, 200, {
-      ok: true,
-      mode: "bundle",
-      fileName: `${files.length} arquivos`,
-      size: totalSize,
-      totalSize,
-      fileCount: files.length,
-      createdAt: bundle.createdAt,
-      zipDownloadUrl: shareBundleDownloadUrl(session, bundle),
-      files: files.map((file) => shareFileInfo(session, file))
-    });
-    return;
-  }
-
-  const match = getSharedFileFromUrl(url);
-  if (!match) {
-    writeJson(res, 404, { ok: false, error: "Arquivo indisponivel ou link expirado" });
-    return;
-  }
-
-  const { session, file } = match;
-  const fileInfo = shareFileInfo(session, file);
-
-  writeJson(res, 200, {
-    ok: true,
-    mode: "single",
-    fileName: fileInfo.fileName,
-    size: fileInfo.size,
-    createdAt: fileInfo.createdAt,
-    downloadUrl: fileInfo.downloadUrl,
-    files: [fileInfo]
-  });
-}
-
-async function handleShareBundleDownload(req, res, url) {
-  if (req.method !== "GET") {
-    serveText(res, 405, "Metodo nao permitido");
-    return;
-  }
-
-  const match = getShareBundleFromUrl(url);
-  if (!match) {
-    serveText(res, 404, "Arquivos indisponiveis ou link expirado");
-    return;
-  }
-
-  try {
-    await sendZip(res, shareBundleZipName(match.files), match.files);
-  } catch (error) {
-    if (!res.headersSent) {
-      serveText(res, 404, error.message || "Arquivos indisponiveis");
-    } else {
-      res.destroy(error);
-    }
-  }
-}
-
-async function handleShareDownload(req, res, url) {
-  if (req.method !== "GET") {
-    serveText(res, 405, "Metodo nao permitido");
-    return;
-  }
-
-  const match = getSharedFileFromUrl(url);
-  if (!match) {
-    serveText(res, 404, "Arquivo indisponivel ou link expirado");
-    return;
-  }
-
-  const { file } = match;
-
-  try {
-    const stat = await fsp.stat(file.targetPath);
-    if (!stat.isFile()) throw new Error("Arquivo indisponivel");
-
-    res.writeHead(200, {
-      "content-type": "application/octet-stream",
-      "content-length": stat.size,
-      "content-disposition": contentDisposition(file.fileName),
-      "cache-control": "no-store"
-    });
-
-    fs.createReadStream(file.targetPath).pipe(res);
-  } catch {
-    serveText(res, 404, "Arquivo indisponivel");
-  }
-}
 
 const route = createRoute({
   PUBLIC_DIR,

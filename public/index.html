@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Transferencia por QR Code</title>
     <link rel="stylesheet" href="/assets/styles.css">
+    <script src="/assets/shared.js" defer></script>
     <script src="/assets/app.js" defer></script>
   </head>
   <body class="desktop">
@@ -157,6 +158,7 @@
               <h3>Recebidos</h3>
               <div class="history-heading-actions">
                 <span id="historyCount">0</span>
+                <button id="clearHistoryButton" type="button" class="text-button" hidden>Limpar historico</button>
                 <a id="downloadBundleButton" class="download-bundle-button" hidden>Baixar tudo (.zip)</a>
               </div>
             </div>
@@ -247,13 +249,7 @@
             </div>
           </div>
 
-          <div class="share-ready-list hidden" id="shareReadyList">
-            <div class="share-ready-summary">
-              <span id="shareReadySummary">0 arquivos</span>
-              <button id="shareReadyToggleButton" type="button" class="text-button">Ver todos</button>
-            </div>
-            <div class="share-ready-items" id="shareReadyItems"></div>
-          </div>
+          <div class="share-ready-items" id="shareReadyItems"></div>
         </div>
       </section>
 
