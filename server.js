@@ -4,8 +4,10 @@ const http = require("http");
 const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
-const { once } = require("events");
 const QRCode = require("qrcode");
+const { createRoute } = require("./src/routes");
+const { deviceLabelFromUserAgent, publicMobilePresence } = require("./src/sessions");
+const { sendZip } = require("./src/zip");
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = "0.0.0.0";
@@ -282,6 +284,7 @@ async function getConfig(req, session) {
     sessionId: session.id,
     pin: session.pin,
     pinEnabled: session.pinEnabled,
+    createdAt: session.createdAt,
     appUrl: `http://localhost:${PORT}`,
     sendUrl,
     qrCode: await QRCode.toDataURL(sendUrl, {
@@ -416,18 +419,8 @@ function publicHistoryItem(item) {
     duration: item.duration,
     completedAt: item.completedAt,
     location: item.location,
-    downloadUrl: item.downloadUrl
-  };
-}
-
-function publicMobilePresence(session) {
-  const clients = Array.from(session.mobileClients.values());
-  const firstClient = clients[0] || null;
-
-  return {
-    connected: clients.length > 0,
-    count: clients.length,
-    label: firstClient?.label || null
+    downloadUrl: item.downloadUrl,
+    previewUrl: item.previewUrl || null
   };
 }
 
@@ -436,6 +429,11 @@ function publicState(session) {
     active: Array.from(session.activeTransfers.values()).map(formatPublicTransfer),
     history: session.history.slice(0, 12).map(publicHistoryItem),
     mobile: publicMobilePresence(session),
+    session: {
+      id: session.id,
+      createdAt: session.createdAt,
+      pinEnabled: session.pinEnabled
+    },
     note: {
       text: session.noteText || "",
       updatedAt: session.noteUpdatedAt || session.createdAt
@@ -839,33 +837,6 @@ function disconnectMobileClients(session, message) {
   session.mobileClients.clear();
 }
 
-function deviceLabelFromUserAgent(userAgent) {
-  const ua = String(userAgent || "");
-  if (!ua) return "Aparelho conectado";
-
-  if (/iPhone/i.test(ua)) return "iPhone";
-  if (/iPad/i.test(ua)) return "iPad";
-
-  const androidMatch = ua.match(/Android [^;)]*;\s*([^;)]+?)(?:\s+Build|\)|;)/i);
-  if (androidMatch) {
-    const rawModel = androidMatch[1]
-      .replace(/\bwv\b/gi, "")
-      .replace(/\bMobile\b/gi, "")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    if (rawModel && !/Chrome|Safari|Version|Linux/i.test(rawModel)) {
-      return rawModel.slice(0, 48);
-    }
-
-    return "Celular Android";
-  }
-
-  if (/Android/i.test(ua)) return "Celular Android";
-  if (/Mobile|Phone/i.test(ua)) return "Celular";
-  return "Aparelho conectado";
-}
-
 async function handlePinToggle(req, res, url) {
   if (!requireLocalRequest(req, res)) return;
 
@@ -976,229 +947,20 @@ function contentDisposition(fileName) {
   return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(safeName)}`;
 }
 
-const crcTable = Array.from({ length: 256 }, (_, index) => {
-  let value = index;
-  for (let bit = 0; bit < 8; bit += 1) {
-    value = value & 1 ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1);
-  }
-  return value >>> 0;
-});
-
-function updateCrc32(crc, chunk) {
-  let value = crc;
-  for (const byte of chunk) {
-    value = crcTable[(value ^ byte) & 0xff] ^ (value >>> 8);
-  }
-  return value >>> 0;
-}
-
-async function fileCrc32(filePath) {
-  let crc = 0xffffffff;
-  for await (const chunk of fs.createReadStream(filePath)) {
-    crc = updateCrc32(crc, chunk);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-function dosDateTime(date = new Date()) {
-  const year = Math.max(1980, date.getFullYear());
-  return {
-    time: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
-    date: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()
-  };
-}
-
-function zipEntryName(fileName) {
-  return sanitizeRelativeFilePath(fileName).replace(/^\/+/, "");
-}
-
-function writeUInt64LE(buffer, value, offset) {
-  buffer.writeBigUInt64LE(BigInt(value), offset);
-}
-
-function zip64Extra(...values) {
-  const buffer = Buffer.alloc(4 + values.length * 8);
-  buffer.writeUInt16LE(0x0001, 0);
-  buffer.writeUInt16LE(values.length * 8, 2);
-  values.forEach((value, index) => writeUInt64LE(buffer, value, 4 + index * 8));
-  return buffer;
-}
-
-function zipLocalHeader(entry) {
-  const name = Buffer.from(entry.name, "utf8");
-  const useZip64 = entry.useZip64;
-  const extra = useZip64 ? zip64Extra(entry.size, entry.size) : Buffer.alloc(0);
-  const header = Buffer.alloc(30);
-  const { time, date } = dosDateTime(entry.modifiedAt);
-
-  header.writeUInt32LE(0x04034b50, 0);
-  header.writeUInt16LE(useZip64 ? 45 : 20, 4);
-  header.writeUInt16LE(0x0800, 6);
-  header.writeUInt16LE(0, 8);
-  header.writeUInt16LE(time, 10);
-  header.writeUInt16LE(date, 12);
-  header.writeUInt32LE(entry.crc, 14);
-  header.writeUInt32LE(useZip64 ? 0xffffffff : Number(entry.size), 18);
-  header.writeUInt32LE(useZip64 ? 0xffffffff : Number(entry.size), 22);
-  header.writeUInt16LE(name.length, 26);
-  header.writeUInt16LE(extra.length, 28);
-
-  return Buffer.concat([header, name, extra]);
-}
-
-function zipCentralHeader(entry) {
-  const name = Buffer.from(entry.name, "utf8");
-  const useZip64 = entry.useZip64;
-  const extra = useZip64 ? zip64Extra(entry.size, entry.size, entry.offset) : Buffer.alloc(0);
-  const header = Buffer.alloc(46);
-  const { time, date } = dosDateTime(entry.modifiedAt);
-
-  header.writeUInt32LE(0x02014b50, 0);
-  header.writeUInt16LE(45, 4);
-  header.writeUInt16LE(useZip64 ? 45 : 20, 6);
-  header.writeUInt16LE(0x0800, 8);
-  header.writeUInt16LE(0, 10);
-  header.writeUInt16LE(time, 12);
-  header.writeUInt16LE(date, 14);
-  header.writeUInt32LE(entry.crc, 16);
-  header.writeUInt32LE(useZip64 ? 0xffffffff : Number(entry.size), 20);
-  header.writeUInt32LE(useZip64 ? 0xffffffff : Number(entry.size), 24);
-  header.writeUInt16LE(name.length, 28);
-  header.writeUInt16LE(extra.length, 30);
-  header.writeUInt16LE(0, 32);
-  header.writeUInt16LE(0, 34);
-  header.writeUInt16LE(0, 36);
-  header.writeUInt32LE(0, 38);
-  header.writeUInt32LE(useZip64 ? 0xffffffff : Number(entry.offset), 42);
-
-  return Buffer.concat([header, name, extra]);
-}
-
-function zipEndRecords(entryCount, centralStart, centralSize, needsZip64) {
-  const parts = [];
-
-  if (needsZip64) {
-    const zip64End = Buffer.alloc(56);
-    zip64End.writeUInt32LE(0x06064b50, 0);
-    writeUInt64LE(zip64End, 44n, 4);
-    zip64End.writeUInt16LE(45, 12);
-    zip64End.writeUInt16LE(45, 14);
-    zip64End.writeUInt32LE(0, 16);
-    zip64End.writeUInt32LE(0, 20);
-    writeUInt64LE(zip64End, BigInt(entryCount), 24);
-    writeUInt64LE(zip64End, BigInt(entryCount), 32);
-    writeUInt64LE(zip64End, centralSize, 40);
-    writeUInt64LE(zip64End, centralStart, 48);
-    parts.push(zip64End);
-
-    const locator = Buffer.alloc(20);
-    locator.writeUInt32LE(0x07064b50, 0);
-    locator.writeUInt32LE(0, 4);
-    writeUInt64LE(locator, centralStart + centralSize, 8);
-    locator.writeUInt32LE(1, 16);
-    parts.push(locator);
-  }
-
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(0, 4);
-  end.writeUInt16LE(0, 6);
-  end.writeUInt16LE(Math.min(entryCount, 0xffff), 8);
-  end.writeUInt16LE(Math.min(entryCount, 0xffff), 10);
-  end.writeUInt32LE(centralSize >= 0xffffffffn ? 0xffffffff : Number(centralSize), 12);
-  end.writeUInt32LE(centralStart >= 0xffffffffn ? 0xffffffff : Number(centralStart), 16);
-  end.writeUInt16LE(0, 20);
-  parts.push(end);
-
-  return Buffer.concat(parts);
-}
-
-async function writeResponse(res, chunk) {
-  if (!res.write(chunk)) {
-    await once(res, "drain");
-  }
-}
-
-async function streamFileToResponse(res, filePath) {
-  for await (const chunk of fs.createReadStream(filePath)) {
-    await writeResponse(res, chunk);
-  }
-}
-
-async function prepareZipEntries(files) {
-  const usedNames = new Map();
-  const entries = [];
-
-  for (const file of files) {
-    const stat = await fsp.stat(file.targetPath);
-    if (!stat.isFile()) throw new Error("Arquivo indisponivel");
-
-    const baseName = zipEntryName(file.fileName);
-    const parsed = path.posix.parse(baseName);
-    const count = usedNames.get(baseName) || 0;
-    usedNames.set(baseName, count + 1);
-    const name = count === 0 ? baseName : `${parsed.dir ? `${parsed.dir}/` : ""}${parsed.name} (${count})${parsed.ext}`;
-
-    entries.push({
-      name,
-      filePath: file.targetPath,
-      size: BigInt(stat.size),
-      crc: await fileCrc32(file.targetPath),
-      modifiedAt: stat.mtime
-    });
-  }
-
-  return entries;
-}
-
-async function sendZip(res, zipName, files) {
-  const entries = await prepareZipEntries(files);
-  let offset = 0n;
-  let needsZip64 = false;
-
-  res.writeHead(200, {
-    "content-type": "application/zip",
-    "content-disposition": contentDisposition(zipName),
-    "cache-control": "no-store"
-  });
-
-  for (const entry of entries) {
-    entry.offset = offset;
-    entry.useZip64 = entry.size >= 0xffffffffn || offset >= 0xffffffffn;
-    needsZip64 = needsZip64 || entry.useZip64;
-
-    const header = zipLocalHeader(entry);
-    await writeResponse(res, header);
-    offset += BigInt(header.length);
-
-    await streamFileToResponse(res, entry.filePath);
-    offset += entry.size;
-  }
-
-  const centralStart = offset;
-  for (const entry of entries) {
-    const header = zipCentralHeader(entry);
-    await writeResponse(res, header);
-    offset += BigInt(header.length);
-  }
-
-  const centralSize = offset - centralStart;
-  needsZip64 = needsZip64 || entries.length >= 0xffff || centralStart >= 0xffffffffn || centralSize >= 0xffffffffn;
-  const end = zipEndRecords(entries.length, centralStart, centralSize, needsZip64);
-  await writeResponse(res, end);
-  res.end();
-}
-
-function isHostedEnvironment() {
-  return Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_EXTERNAL_URL);
-}
-
 function uploadLocationLabel(targetPath) {
   if (isHostedEnvironment()) {
     return "Servidor temporario - use o botao de download";
   }
 
   return targetPath;
+}
+
+function imagePreviewContentType(fileName) {
+  const extension = path.extname(String(fileName || "")).toLowerCase();
+  if (extension === ".jpg" || extension === ".jpeg") return "image/jpeg";
+  if (extension === ".png") return "image/png";
+  if (extension === ".webp") return "image/webp";
+  return null;
 }
 
 function safeUploadId(value) {
@@ -1303,13 +1065,17 @@ function removeSharedFileFromBundles(session, fileId) {
 function rememberCompletedUpload(session, { id, fileName, savedName, targetPath, size, duration, completedAt }) {
   const downloadToken = crypto.randomBytes(16).toString("hex");
   const downloadUrl = `/download?session=${encodeURIComponent(session.id)}&id=${encodeURIComponent(id)}&token=${downloadToken}`;
+  const previewUrl = imagePreviewContentType(savedName || fileName)
+    ? `${downloadUrl}&preview=1`
+    : null;
 
   session.completedFiles.set(id, {
     fileName,
     savedName,
     targetPath,
     size,
-    downloadToken
+    downloadToken,
+    previewUrl
   });
 
   session.history.unshift({
@@ -1320,7 +1086,8 @@ function rememberCompletedUpload(session, { id, fileName, savedName, targetPath,
     duration,
     completedAt,
     location: uploadLocationLabel(targetPath),
-    downloadUrl
+    downloadUrl,
+    previewUrl
   });
   session.history.splice(12);
 
@@ -1824,10 +1591,14 @@ async function handleDownload(req, res, url) {
     const stat = await fsp.stat(file.targetPath);
     if (!stat.isFile()) throw new Error("Arquivo indisponivel");
 
+    const previewType = url.searchParams.get("preview") === "1"
+      ? imagePreviewContentType(file.savedName || file.fileName)
+      : null;
+
     res.writeHead(200, {
-      "content-type": "application/octet-stream",
+      "content-type": previewType || "application/octet-stream",
       "content-length": stat.size,
-      "content-disposition": contentDisposition(file.savedName),
+      "content-disposition": previewType ? "inline" : contentDisposition(file.savedName),
       "cache-control": "no-store"
     });
 
@@ -2365,227 +2136,51 @@ async function handleShareDownload(req, res, url) {
   }
 }
 
-async function route(req, res) {
-  const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-
-  if (url.pathname === "/") {
-    await serveStatic(res, path.join(PUBLIC_DIR, "index.html"));
-    return;
-  }
-
-  if (url.pathname === "/send") {
-    if (!validateKey(url)) {
-      await serveStatic(res, path.join(PUBLIC_DIR, "expired.html"));
-      return;
-    }
-    await serveStatic(res, path.join(PUBLIC_DIR, "send.html"));
-    return;
-  }
-
-  if (url.pathname === "/share") {
-    await serveStatic(res, path.join(PUBLIC_DIR, "share.html"));
-    return;
-  }
-
-  if (url.pathname === "/api/config") {
-    const isLocal = isLocalRequest(req);
-    const session = getOrCreateSession(url.searchParams.get("session"));
-    const config = await getConfig(req, session);
-
-    writeJson(res, 200, {
-      ...config,
-      addresses: isLocal ? config.addresses : [],
-      canChooseDestination: isLocal,
-      pinEnabled: session.pinEnabled
-    });
-    return;
-  }
-
-  if (url.pathname === "/api/state") {
-    const session = getOrCreateSession(url.searchParams.get("session"));
-    writeJson(res, 200, publicState(session));
-    return;
-  }
-
-  if (url.pathname === "/api/destination") {
-    await handleDestination(req, res);
-    return;
-  }
-
-  if (url.pathname === "/api/folders") {
-    await handleFolders(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/api/note") {
-    await handleNote(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/api/pin/verify") {
-    await handlePinVerify(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/api/pin/status") {
-    handlePinStatus(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/api/pin/toggle") {
-    await handlePinToggle(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/api/session/renew") {
-    await handleSessionRenew(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/api/session/end") {
-    await handleSessionEnd(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/api/history/clear") {
-    await handleHistoryClear(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/events") {
-    const hasMobileKey = url.searchParams.has("key");
-    const session = sessionFromKeyOrId(req, url, { requireMobileAuth: true });
-    if (!session) {
-      const expired = hasMobileKey && !sessionByKey(url);
-      writeJson(res, 403, {
-        ok: false,
-        expired,
-        pinRequired: !expired && hasMobileKey,
-        error: expired ? EXPIRED_QR_MESSAGE : PIN_REQUIRED_MESSAGE
-      });
-      return;
-    }
-    res.writeHead(200, {
-      "content-type": "text/event-stream; charset=utf-8",
-      "cache-control": "no-cache, no-transform",
-      connection: "keep-alive",
-      "x-accel-buffering": "no"
-    });
-    const role = hasMobileKey ? "mobile" : "desktop";
-    const mobileClientId = role === "mobile" ? crypto.randomUUID() : null;
-    const client = { res, sessionId: session.id, role, mobileClientId };
-    sseClients.add(client);
-    if (role === "mobile") {
-      session.mobileClients.set(mobileClientId, {
-        label: deviceLabelFromUserAgent(req.headers["user-agent"]),
-        connectedAt: Date.now()
-      });
-      broadcastState(session);
-    }
-    sendSseState(res, session);
-    req.on("close", () => {
-      sseClients.delete(client);
-      if (role === "mobile") {
-        session.mobileClients.delete(mobileClientId);
-        broadcastState(session);
-      }
-    });
-    return;
-  }
-
-  if (url.pathname === "/upload") {
-    await handleUpload(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/upload/start") {
-    await handleUploadStart(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/upload/status") {
-    await handleUploadStatus(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/upload/cancel") {
-    await handleUploadCancel(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/upload/chunk") {
-    await handleUploadChunk(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/upload/finish") {
-    await handleUploadFinish(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/download") {
-    await handleDownload(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/download/bundle") {
-    await handleDownloadBundle(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/share/start") {
-    await handleShareStart(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/share/status") {
-    await handleShareStatus(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/share/chunk") {
-    await handleShareChunk(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/share/finish") {
-    await handleShareFinish(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/share/bundle") {
-    await handleShareBundle(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/share/cancel") {
-    await handleShareCancel(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/share/info") {
-    await handleShareInfo(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/share/download") {
-    await handleShareDownload(req, res, url);
-    return;
-  }
-
-  if (url.pathname === "/share/download-bundle") {
-    await handleShareBundleDownload(req, res, url);
-    return;
-  }
-
-  if (url.pathname.startsWith("/assets/")) {
-    const assetPath = path.join(PUBLIC_DIR, url.pathname.replace(/^\/assets\//, ""));
-    await serveStatic(res, assetPath);
-    return;
-  }
-
-  serveText(res, 404, "Nao encontrado");
-}
+const route = createRoute({
+  PUBLIC_DIR,
+  sseClients,
+  serveStatic,
+  validateKey,
+  isLocalRequest,
+  getOrCreateSession,
+  getConfig,
+  writeJson,
+  publicState,
+  handleDestination,
+  handleFolders,
+  handleNote,
+  handlePinVerify,
+  handlePinStatus,
+  handlePinToggle,
+  handleSessionRenew,
+  handleSessionEnd,
+  handleHistoryClear,
+  sessionFromKeyOrId,
+  sessionByKey,
+  EXPIRED_QR_MESSAGE,
+  PIN_REQUIRED_MESSAGE,
+  deviceLabelFromUserAgent,
+  broadcastState,
+  sendSseState,
+  handleUpload,
+  handleUploadStart,
+  handleUploadStatus,
+  handleUploadCancel,
+  handleUploadChunk,
+  handleUploadFinish,
+  handleDownload,
+  handleDownloadBundle,
+  handleShareStart,
+  handleShareStatus,
+  handleShareChunk,
+  handleShareFinish,
+  handleShareBundle,
+  handleShareCancel,
+  handleShareInfo,
+  handleShareDownload,
+  handleShareBundleDownload,
+  serveText
+});
 
 async function main() {
   await loadSettings();

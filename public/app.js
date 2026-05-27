@@ -15,6 +15,11 @@ const sessionPin = document.querySelector("#sessionPin");
 const pinVisibilityButton = document.querySelector("#pinVisibilityButton");
 const pinToggleButton = document.querySelector("#pinToggleButton");
 const pinBox = document.querySelector("#pinBox");
+const qrStatusText = document.querySelector("#qrStatusText");
+const pinStatusText = document.querySelector("#pinStatusText");
+const sessionAgeText = document.querySelector("#sessionAgeText");
+const deviceCount = document.querySelector("#deviceCount");
+const deviceList = document.querySelector("#deviceList");
 const renewQrButton = document.querySelector("#renewQrButton");
 const endSessionButton = document.querySelector("#endSessionButton");
 const currentTitle = document.querySelector("#currentTitle");
@@ -23,6 +28,7 @@ const progressFill = document.querySelector("#progressFill");
 const receivedMetric = document.querySelector("#receivedMetric");
 const speedMetric = document.querySelector("#speedMetric");
 const etaMetric = document.querySelector("#etaMetric");
+const notifyButton = document.querySelector("#notifyButton");
 const emptyState = document.querySelector("#emptyState");
 const historyList = document.querySelector("#historyList");
 const historyCount = document.querySelector("#historyCount");
@@ -58,6 +64,9 @@ const shareQrImage = document.querySelector("#shareQrImage");
 const shareReadyName = document.querySelector("#shareReadyName");
 const shareReadySize = document.querySelector("#shareReadySize");
 const shareReadyList = document.querySelector("#shareReadyList");
+const shareReadySummary = document.querySelector("#shareReadySummary");
+const shareReadyToggleButton = document.querySelector("#shareReadyToggleButton");
+const shareReadyItems = document.querySelector("#shareReadyItems");
 const shareLink = document.querySelector("#shareLink");
 const shareCopyButton = document.querySelector("#shareCopyButton");
 const sharedNote = document.querySelector("#sharedNote");
@@ -66,8 +75,10 @@ const noteCopyButton = document.querySelector("#noteCopyButton");
 
 const RECEIVER_SESSION_KEY = "transferenciaQrReceiverSession";
 const THEME_KEY = "transferenciaQrTheme";
+const NOTIFY_KEY = "transferenciaQrNotifyEnabled";
 const SHARE_CHUNK_SIZE = 1024 * 1024;
 const SHARE_MAX_RETRIES = 3;
+const SHARE_READY_LIMIT = 10;
 
 let currentFolder = null;
 let parentFolder = null;
@@ -82,6 +93,14 @@ let noteSaveTimer = null;
 let currentSessionPin = "";
 let pinVisible = false;
 let pinEnabled = true;
+let sessionCreatedAt = 0;
+let shareReadyFiles = [];
+let shareReadyTotalSize = 0;
+let shareReadyExpanded = false;
+let historyInitialized = false;
+let knownHistoryIds = new Set();
+let notifyEnabled = false;
+let audioContext = null;
 const receiverSessionId = getReceiverSessionId();
 
 function createReceiverSessionId() {
@@ -131,6 +150,90 @@ function applyTheme(theme) {
   }
 }
 
+function loadNotifyPreference() {
+  try {
+    return localStorage.getItem(NOTIFY_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveNotifyPreference(value) {
+  try {
+    localStorage.setItem(NOTIFY_KEY, value ? "1" : "0");
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+function updateNotifyButton() {
+  notifyButton.textContent = notifyEnabled ? "Avisos ligados" : "Ativar avisos";
+  notifyButton.setAttribute("aria-pressed", String(notifyEnabled));
+}
+
+function ensureAudioContext() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return null;
+
+  if (!audioContext) {
+    audioContext = new AudioContextClass();
+  }
+
+  if (audioContext.state === "suspended") {
+    audioContext.resume().catch(() => {});
+  }
+
+  return audioContext;
+}
+
+function playDoneSound() {
+  const context = ensureAudioContext();
+  if (!context) return;
+
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  const now = context.currentTime;
+
+  oscillator.type = "sine";
+  oscillator.frequency.setValueAtTime(660, now);
+  oscillator.frequency.setValueAtTime(880, now + 0.08);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start(now);
+  oscillator.stop(now + 0.3);
+}
+
+function browserNotify(title, body) {
+  if (!notifyEnabled) return;
+
+  playDoneSound();
+
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification(title, { body });
+  }
+}
+
+function notifyNewHistoryItems(items) {
+  const ids = new Set(items.map((item) => item.id));
+
+  if (!historyInitialized) {
+    knownHistoryIds = ids;
+    historyInitialized = true;
+    return;
+  }
+
+  for (const item of items) {
+    if (!knownHistoryIds.has(item.id)) {
+      browserNotify("Arquivo recebido", item.savedName || item.fileName || "Transferencia concluida");
+    }
+  }
+
+  knownHistoryIds = ids;
+}
+
 function sessionUrl(path) {
   const separator = path.includes("?") ? "&" : "?";
   return `${path}${separator}session=${encodeURIComponent(receiverSessionId)}`;
@@ -168,6 +271,28 @@ function formatTime(seconds) {
   return `${hours}h ${(minutes % 60).toString().padStart(2, "0")}min`;
 }
 
+function formatSessionAge(timestamp) {
+  const createdAt = Number(timestamp || 0);
+  if (!createdAt) return "--";
+
+  const seconds = Math.max(0, Math.floor((Date.now() - createdAt) / 1000));
+  if (seconds < 60) return "agora";
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `ha ${minutes} min`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `ha ${hours}h`;
+
+  return `ha ${Math.floor(hours / 24)} dias`;
+}
+
+function updateSessionStatus() {
+  qrStatusText.textContent = currentSendUrl ? "Ativo" : "Gerando";
+  pinStatusText.textContent = pinEnabled ? "Ligado" : "Desligado";
+  sessionAgeText.textContent = formatSessionAge(sessionCreatedAt);
+}
+
 function setConnection(online) {
   connectionDot.classList.toggle("online", online);
   connectionDot.classList.toggle("offline", !online);
@@ -179,10 +304,40 @@ function renderMobilePresence(mobile) {
   const count = Number(mobile?.count || 0);
   const label = String(mobile?.label || "").trim();
   const suffix = label ? ` (${label})` : count > 1 ? ` (${count})` : "";
+  const clients = Array.isArray(mobile?.clients) ? mobile.clients : [];
 
   mobileConnectionDot.classList.toggle("online", connected);
   mobileConnectionDot.classList.toggle("offline", !connected);
   mobileConnectionText.textContent = connected ? `Celular conectado${suffix}` : "Celular desconectado";
+  deviceCount.textContent = String(count);
+  deviceList.innerHTML = "";
+
+  if (!clients.length) {
+    const empty = document.createElement("p");
+    empty.textContent = "Nenhum aparelho conectado.";
+    deviceList.append(empty);
+    return;
+  }
+
+  for (const client of clients) {
+    const row = document.createElement("div");
+    row.className = "device-item";
+
+    const dot = document.createElement("span");
+    dot.className = "device-dot";
+    dot.setAttribute("aria-hidden", "true");
+
+    const info = document.createElement("div");
+    const name = document.createElement("strong");
+    const meta = document.createElement("span");
+    const deviceName = client.label || "Aparelho";
+    name.textContent = /conectado$/i.test(deviceName) ? deviceName : `${deviceName} conectado`;
+    meta.textContent = `conectado ${formatSessionAge(client.connectedAt)}`;
+    info.append(name, meta);
+
+    row.append(dot, info);
+    deviceList.append(row);
+  }
 }
 
 function renderAddresses(addresses) {
@@ -223,6 +378,7 @@ function renderSessionPin() {
     pinBox.style.borderColor = "rgba(15, 143, 134, 0.28)";
     pinBox.style.background = "rgba(15, 143, 134, 0.06)";
   }
+  updateSessionStatus();
 }
 
 function setSessionPin(pin) {
@@ -247,7 +403,9 @@ function applyConfig(config, { notify = false } = {}) {
 
   sendLink.value = config.sendUrl;
   pinEnabled = config.pinEnabled !== false;
+  sessionCreatedAt = Number(config.createdAt || sessionCreatedAt || 0);
   setSessionPin(config.pin);
+  updateSessionStatus();
   renderAddresses(config.addresses || []);
 
   if (changed && notify) {
@@ -319,25 +477,31 @@ function renderHistory(items) {
     const finishedMeta = duration > 0
       ? `terminou em ${formatTime(duration)} · media ${formatBytes(averageSpeed)}/s`
       : "concluido";
+    const previewHtml = item.previewUrl
+      ? `<img class="history-preview" src="${escapeHtml(item.previewUrl)}" alt="Previa de ${escapeHtml(item.savedName)}" loading="lazy">`
+      : "";
     const row = document.createElement("article");
-    row.className = "history-item";
+    row.className = `history-item${item.previewUrl ? " with-preview" : ""}`;
     row.innerHTML = `
-      <header>
-        <strong>${escapeHtml(item.savedName)}</strong>
-        <div class="history-actions">
-          <span>${formatBytes(item.size)}</span>
-          ${item.downloadUrl ? `
-            <a class="download-button" href="${escapeHtml(item.downloadUrl)}" title="Baixar arquivo" aria-label="Baixar arquivo">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 3v12"></path>
-                <path d="m7 10 5 5 5-5"></path>
-                <path d="M5 21h14"></path>
-              </svg>
-            </a>
-          ` : ""}
+      ${previewHtml}
+      <div class="history-content">
+        <header>
+          <strong>${escapeHtml(item.savedName)}</strong>
+          <div class="history-actions">
+            <span>${formatBytes(item.size)}</span>
+            ${item.downloadUrl ? `
+              <a class="download-button" href="${escapeHtml(item.downloadUrl)}" title="Baixar arquivo" aria-label="Baixar arquivo">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3v12"></path>
+                  <path d="m7 10 5 5 5-5"></path>
+                  <path d="M5 21h14"></path>
+                </svg>
+              </a>
+            ` : ""}
+          </div>
+        </header>
+        <span class="history-meta">${escapeHtml(item.location || "Disponivel para download")} · ${escapeHtml(finishedMeta)}</span>
         </div>
-      </header>
-      <span class="history-meta">${escapeHtml(item.location || "Disponivel para download")} · ${escapeHtml(finishedMeta)}</span>
     `;
     historyList.append(row);
   }
@@ -421,6 +585,12 @@ function scheduleNoteSave() {
 
 function applyState(state) {
   const active = state.active.find((item) => item.status === "receiving") || state.active[0];
+  if (state.session) {
+    sessionCreatedAt = Number(state.session.createdAt || sessionCreatedAt || 0);
+    pinEnabled = state.session.pinEnabled !== false;
+    renderSessionPin();
+  }
+  notifyNewHistoryItems(state.history || []);
   renderProgress(active);
   renderHistory(state.history || []);
   renderMobilePresence(state.mobile);
@@ -691,22 +861,16 @@ function uploadShareChunk(id, file, offset, chunk, startedAt, baseOffset, queue 
   });
 }
 
-function renderShareResult(data) {
-  const files = Array.isArray(data.files) && data.files.length
-    ? data.files
-    : [{ fileName: data.fileName, size: data.size }];
-  const totalSize = Number(data.totalSize ?? data.size ?? files.reduce((total, file) => total + Number(file.size || 0), 0));
+function renderShareReadyFiles() {
+  const visibleFiles = shareReadyExpanded ? shareReadyFiles : shareReadyFiles.slice(0, SHARE_READY_LIMIT);
+  const hiddenCount = Math.max(0, shareReadyFiles.length - visibleFiles.length);
 
-  shareResult.classList.remove("hidden");
-  shareQrImage.src = data.qrCode;
-  shareReadyName.textContent = files.length === 1 ? files[0].fileName : `${files.length} arquivos prontos`;
-  shareReadySize.textContent = files.length === 1 ? formatBytes(files[0].size) : `${formatBytes(totalSize)} no total`;
-  shareLink.value = data.shareUrl;
+  shareReadySummary.textContent = `${shareReadyFiles.length} arquivo${shareReadyFiles.length === 1 ? "" : "s"} · ${formatBytes(shareReadyTotalSize)}`;
+  shareReadyToggleButton.hidden = shareReadyFiles.length <= SHARE_READY_LIMIT;
+  shareReadyToggleButton.textContent = shareReadyExpanded ? "Recolher lista" : `Ver todos (${hiddenCount})`;
+  shareReadyItems.innerHTML = "";
 
-  shareReadyList.innerHTML = "";
-  shareReadyList.classList.toggle("hidden", files.length <= 1);
-
-  for (const file of files) {
+  for (const file of visibleFiles) {
     const row = document.createElement("div");
     row.className = "share-ready-item";
 
@@ -717,8 +881,27 @@ function renderShareResult(data) {
     size.textContent = formatBytes(file.size);
 
     row.append(name, size);
-    shareReadyList.append(row);
+    shareReadyItems.append(row);
   }
+}
+
+function renderShareResult(data) {
+  const files = Array.isArray(data.files) && data.files.length
+    ? data.files
+    : [{ fileName: data.fileName, size: data.size }];
+  const totalSize = Number(data.totalSize ?? data.size ?? files.reduce((total, file) => total + Number(file.size || 0), 0));
+
+  shareReadyFiles = files;
+  shareReadyTotalSize = totalSize;
+  shareReadyExpanded = files.length <= SHARE_READY_LIMIT;
+
+  shareResult.classList.remove("hidden");
+  shareQrImage.src = data.qrCode;
+  shareReadyName.textContent = files.length === 1 ? files[0].fileName : `${files.length} arquivos prontos`;
+  shareReadySize.textContent = files.length === 1 ? formatBytes(files[0].size) : `${formatBytes(totalSize)} no total`;
+  shareLink.value = data.shareUrl;
+  shareReadyList.classList.toggle("hidden", files.length <= 1);
+  renderShareReadyFiles();
 }
 
 async function prepareOneShareFile(file, id, queue) {
@@ -818,6 +1001,7 @@ async function prepareShareFiles() {
     const averageSpeed = totalSize / duration;
     shareReceivedLabel.textContent = `${formatBytes(totalSize)} enviados`;
     shareEtaLabel.textContent = `terminou em ${formatTime(duration)} · media ${formatBytes(averageSpeed)}/s`;
+    browserNotify("Arquivos prontos", files.length === 1 ? fileDisplayName(files[0]) : `${files.length} arquivos preparados para o celular`);
   } catch (error) {
     shareProgress.classList.remove("hidden");
     shareProgressTitle.textContent = shareStopRequested ? "Envio cancelado" : "Falha ao preparar arquivos";
@@ -962,6 +1146,10 @@ function updateShareSelection(fileList, source, otherInput) {
   if (otherInput) otherInput.value = "";
   resetShareProgress();
   shareResult.classList.add("hidden");
+  shareReadyFiles = [];
+  shareReadyTotalSize = 0;
+  shareReadyExpanded = false;
+  shareReadyItems.innerHTML = "";
   setShareControls(false);
 }
 
@@ -1097,6 +1285,11 @@ shareCopyButton.addEventListener("click", async () => {
   }, 1200);
 });
 
+shareReadyToggleButton.addEventListener("click", () => {
+  shareReadyExpanded = !shareReadyExpanded;
+  renderShareReadyFiles();
+});
+
 noteCopyButton.addEventListener("click", async () => {
   await copyTextToClipboard(sharedNote.value, sharedNote);
   setNoteStatus("Texto copiado");
@@ -1106,6 +1299,22 @@ noteCopyButton.addEventListener("click", async () => {
 themeToggle.addEventListener("click", () => {
   const currentTheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
   applyTheme(currentTheme === "dark" ? "light" : "dark");
+});
+
+notifyButton.addEventListener("click", async () => {
+  notifyEnabled = !notifyEnabled;
+
+  if (notifyEnabled && "Notification" in window && Notification.permission === "default") {
+    try {
+      await Notification.requestPermission();
+    } catch {
+      // The sound alert still works if notification permission is unavailable.
+    }
+  }
+
+  if (notifyEnabled) ensureAudioContext();
+  saveNotifyPreference(notifyEnabled);
+  updateNotifyButton();
 });
 
 pinVisibilityButton.addEventListener("click", () => {
@@ -1119,6 +1328,8 @@ pinToggleButton.addEventListener("click", async () => {
     const response = await fetch(sessionUrl("/api/pin/toggle"), { method: "POST" });
     const data = await readJsonResponse(response);
     pinEnabled = data.pinEnabled !== false;
+    currentSendUrl = data.sendUrl || currentSendUrl;
+    sessionCreatedAt = Number(data.createdAt || sessionCreatedAt || 0);
     sendLink.value = data.sendUrl;
     setSessionPin(data.pin);
     renderAddresses(data.addresses || []);
@@ -1174,6 +1385,9 @@ folderPathInput.addEventListener("keydown", (event) => {
 saveFolderButton.addEventListener("click", saveDestination);
 
 applyTheme(preferredTheme());
+notifyEnabled = loadNotifyPreference();
+updateNotifyButton();
+updateSessionStatus();
 loadConfig().catch(() => {
   qrLoader.textContent = "Nao foi possivel gerar o QR Code";
 });
@@ -1184,3 +1398,4 @@ if (!("webkitdirectory" in shareFolderInput)) {
 }
 connectEvents();
 setInterval(checkQrCodeFreshness, 15000);
+setInterval(updateSessionStatus, 30000);

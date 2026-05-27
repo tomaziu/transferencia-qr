@@ -104,6 +104,10 @@ test("GET / serves the desktop page", async () => {
   assert.match(body, /sharedNote/);
   assert.match(body, /shareFolderInput/);
   assert.match(body, /webkitdirectory/);
+  assert.match(body, /deviceList/);
+  assert.match(body, /qrStatusText/);
+  assert.match(body, /notifyButton/);
+  assert.match(body, /shareReadyToggleButton/);
 });
 
 test("GET /api/config returns QR and send URL", async () => {
@@ -243,6 +247,65 @@ test("phone upload preserves folder path in saved name", async () => {
   const download = await fetch(`${baseUrl}${finished.downloadUrl}`);
   assert.equal(download.status, 200);
   assert.equal(await download.text(), body.toString());
+});
+
+test("received image exposes preview URL", async () => {
+  const { key, auth, sessionId } = await getSendCredentials();
+  const id = `image-preview-${Date.now()}`;
+  const fileName = `foto-${Date.now()}.png`;
+  const body = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    0x00, 0x00, 0x00, 0x0d
+  ]);
+
+  await fetch(`${baseUrl}/upload/start?key=${key}&auth=${auth}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, fileName, size: body.length })
+  });
+  await fetch(`${baseUrl}/upload/chunk?key=${key}&auth=${auth}&id=${id}&offset=0`, {
+    method: "POST",
+    headers: { "content-type": "application/octet-stream" },
+    body
+  });
+  const finish = await fetch(`${baseUrl}/upload/finish?key=${key}&auth=${auth}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id })
+  });
+  assert.equal(finish.status, 200);
+
+  const state = await fetch(`${baseUrl}/api/state?session=${sessionId}`);
+  const data = await state.json();
+  const item = data.history.find((historyItem) => historyItem.id === id);
+  assert.match(item.previewUrl, /preview=1/);
+
+  const preview = await fetch(`${baseUrl}${item.previewUrl}`);
+  assert.equal(preview.status, 200);
+  assert.match(preview.headers.get("content-type"), /image\/png/);
+});
+
+test("mobile presence lists connected devices", async () => {
+  const { key, auth, sessionId } = await getSendCredentials();
+  const controller = new AbortController();
+  const stream = fetch(`${baseUrl}/events?key=${key}&auth=${auth}`, {
+    signal: controller.signal,
+    headers: {
+      "user-agent": "Mozilla/5.0 (Linux; Android 14; SM-S918B Build/UP1A) AppleWebKit/537.36 Mobile Safari/537.36"
+    }
+  });
+
+  const response = await stream;
+  assert.equal(response.status, 200);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const state = await fetch(`${baseUrl}/api/state?session=${sessionId}`);
+  const data = await state.json();
+  assert.equal(data.mobile.connected, true);
+  assert.equal(data.mobile.clients.length, 1);
+  assert.match(data.mobile.clients[0].label, /SM-S918B|Android/);
+
+  controller.abort();
+  await response.body?.cancel().catch(() => {});
 });
 
 test("desktop can clear received history and old download links", async () => {

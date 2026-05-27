@@ -32,8 +32,13 @@ Na versão online, cada navegador que abre o painel recebe um QR Code próprio. 
 - Botão para copiar o texto do bloco de notas nos dois lados.
 - Compartilhamento de um ou vários arquivos do PC para o celular por QR Code.
 - Arrastar e soltar arquivos ou pastas na área de envio do PC.
+- Lista de aparelhos conectados, com identificação básica como Android, iPhone ou modelo detectado.
 - Barra de progresso com velocidade e tempo restante.
 - Resultado final com tempo total e velocidade média.
+- Prévia de imagens recebidas no histórico para `.jpg`, `.png` e `.webp`.
+- Lista organizada para muitos arquivos, com total, tamanho combinado e opção de recolher/expandir.
+- Status visual da sessão com QR ativo, PIN ligado/desligado e tempo desde a criação.
+- Aviso sonoro e notificação do navegador quando transferências terminam.
 - Retomada de envio quando a internet falha, enquanto o servidor continuar ativo.
 - Botão para parar o envio atual.
 - Opção para descartar um envio pausado.
@@ -158,7 +163,10 @@ npm test
 
 Arquivos principais:
 
-- `server.js`: servidor HTTP, sessões, upload em partes e download.
+- `server.js`: servidor HTTP e composição das rotas principais.
+- `src/routes.js`: roteamento HTTP do app.
+- `src/sessions.js`: identificação de aparelhos e estado público de conexão.
+- `src/zip.js`: geração de downloads `.zip`.
 - `public/app.js`: painel do computador.
 - `public/send.js`: tela do celular para enviar arquivos.
 - `public/share.js`: tela do celular para baixar arquivos enviados pelo PC.

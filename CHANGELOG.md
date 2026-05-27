@@ -5,6 +5,21 @@ Todas as mudanças importantes deste projeto serão documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 e este projeto adota [Versionamento Semântico](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-05-26
+
+### Adicionado
+
+- Lista de aparelhos conectados com identificação básica por navegador/dispositivo.
+- Prévia de imagens recebidas no histórico para JPG, PNG e WebP.
+- Resumo para listas grandes de arquivos enviados do PC para o celular, com total, tamanho combinado e opção de expandir/recolher.
+- Status visual da sessão com QR, PIN e tempo desde a criação.
+- Aviso sonoro e notificação do navegador ao concluir transferências.
+
+### Melhorado
+
+- Código de rotas, sessões e geração de ZIP separado em módulos dentro de `src/`.
+- Testes de fumaça cobrem prévia de imagem e lista de aparelhos conectados.
+
 ## [1.2.0] - 2026-05-26
 
 ### Adicionado

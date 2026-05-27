@@ -63,6 +63,21 @@
             </div>
           </div>
 
+          <div class="qr-status-grid" aria-label="Status da sessao">
+            <div>
+              <span>QR</span>
+              <strong id="qrStatusText">Ativo</strong>
+            </div>
+            <div>
+              <span>PIN</span>
+              <strong id="pinStatusText">Ligado</strong>
+            </div>
+            <div>
+              <span>Sessao</span>
+              <strong id="sessionAgeText">--</strong>
+            </div>
+          </div>
+
           <div class="qr-notice hidden" id="qrNotice" aria-live="polite">
             <span id="qrNoticeText"></span>
             <button id="qrNoticeClose" type="button" title="Fechar aviso" aria-label="Fechar aviso">
@@ -78,6 +93,16 @@
           <div class="qr-actions">
             <button id="renewQrButton" type="button" class="secondary-button compact-button has-tooltip" title="Troca o QR Code e o PIN, mas mantem historico, bloco de notas e arquivos preparados." data-tooltip="Troca o QR Code e o PIN. Mantem historico, bloco de notas e arquivos preparados.">Renovar QR</button>
             <button id="endSessionButton" type="button" class="secondary-button compact-button danger-button has-tooltip" title="Faz um reset geral: troca QR/PIN e limpa historico, links antigos, bloco de notas e temporarios." data-tooltip="Reset geral. Troca QR/PIN e limpa historico, links antigos, bloco de notas e temporarios.">Encerrar sessao</button>
+          </div>
+
+          <div class="device-box" id="deviceBox">
+            <div class="device-heading">
+              <span>Aparelhos conectados</span>
+              <strong id="deviceCount">0</strong>
+            </div>
+            <div class="device-list" id="deviceList">
+              <p>Nenhum aparelho conectado.</p>
+            </div>
           </div>
 
           <div class="destination-box" id="destinationBox" hidden>
@@ -100,7 +125,10 @@
               <p class="eyebrow">Progresso</p>
               <h2 id="currentTitle">Aguardando arquivo</h2>
             </div>
-            <strong id="percentLabel">0%</strong>
+            <div class="progress-side-actions">
+              <button id="notifyButton" type="button" class="text-button">Ativar avisos</button>
+              <strong id="percentLabel">0%</strong>
+            </div>
           </div>
 
           <div class="progress-track" aria-label="Progresso da transferencia">
@@ -223,7 +251,13 @@
             </div>
           </div>
 
-          <div class="share-ready-list hidden" id="shareReadyList"></div>
+          <div class="share-ready-list hidden" id="shareReadyList">
+            <div class="share-ready-summary">
+              <span id="shareReadySummary">0 arquivos</span>
+              <button id="shareReadyToggleButton" type="button" class="text-button">Ver todos</button>
+            </div>
+            <div class="share-ready-items" id="shareReadyItems"></div>
+          </div>
         </div>
       </section>
 
