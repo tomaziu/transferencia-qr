@@ -154,7 +154,7 @@ test("mobile user agent gets sender landing with camera option", async () => {
   assert.equal(response.status, 200);
   const body = await response.text();
   assert.match(body, /Enviar arquivos/);
-  assert.match(body, /Abrir camera e ler QR/);
+  assert.match(body, /Abrir câmera e ler QR/);
   assert.match(body, /mobile\.js/);
   assert.doesNotMatch(body, /id="qrImage"/);
 });

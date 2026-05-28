@@ -198,7 +198,7 @@ function notifyNewHistoryItems(items) {
 
   for (const item of items) {
     if (!knownHistoryIds.has(item.id)) {
-      browserNotify("Arquivo recebido", item.savedName || item.fileName || "Transferencia concluida");
+      browserNotify("Arquivo recebido", item.savedName || item.fileName || "Transferência concluída");
     }
   }
 
@@ -304,7 +304,7 @@ function renderMobilePresence(mobile) {
           }
           return;
         }
-        alert(data.error || "Nao foi possivel remover o aparelho");
+        alert(data.error || "Não foi possível remover o aparelho");
       } catch {
         alert("Erro ao remover aparelho");
       } finally {
@@ -396,7 +396,7 @@ function applyConfig(config, { notify = false } = {}) {
   renderAddresses(config.addresses || []);
 
   if (changed && notify) {
-    showQrNotice("QR Code renovado. O codigo antigo expirou; escaneie este novo QR.");
+    showQrNotice("QR Code renovado. O código antigo expirou; escaneie este novo QR.");
   }
 
   if (config.canChooseDestination && !destinationLoaded) {
@@ -431,7 +431,7 @@ function renderProgress(transfer) {
   progressFill.style.width = `${percent}%`;
   receivedMetric.textContent = `${formatBytes(transfer.received)} / ${formatBytes(transfer.size)}`;
   speedMetric.textContent = `${formatBytes(transfer.speed)}/s`;
-  etaMetric.textContent = transfer.status === "paused" ? "pausado" : transfer.status === "complete" ? "concluido" : formatTime(transfer.eta);
+  etaMetric.textContent = transfer.status === "paused" ? "pausado" : transfer.status === "complete" ? "concluído" : formatTime(transfer.eta);
   emptyState.classList.add("hidden");
 }
 
@@ -465,7 +465,7 @@ function renderHistory(items) {
     const averageSpeed = duration > 0 ? Number(item.size || 0) / duration : 0;
     const finishedMeta = duration > 0
       ? `terminou em ${formatTime(duration)} · media ${formatBytes(averageSpeed)}/s`
-      : "concluido";
+      : "concluído";
     const isImage = item.previewType && item.previewType.startsWith("image/");
     const isVideo = item.previewType && item.previewType.startsWith("video/");
     const isAudio = item.previewType && item.previewType.startsWith("audio/");
@@ -498,7 +498,7 @@ function renderHistory(items) {
             ` : ""}
           </div>
         </header>
-        <span class="history-meta">${escapeHtml(item.location || "Disponivel para download")} · ${escapeHtml(finishedMeta)}</span>
+        <span class="history-meta">${escapeHtml(item.location || "Disponível para download")} · ${escapeHtml(finishedMeta)}</span>
         </div>
     `;
     historyList.append(row);
@@ -628,7 +628,7 @@ async function loadFolders(folderPath) {
   const data = await response.json();
 
   if (!response.ok || !data.ok) {
-    throw new Error(data.error || "Nao foi possivel abrir esta pasta");
+    throw new Error(data.error || "Não foi possível abrir esta pasta");
   }
 
   currentFolder = data.current;
@@ -679,7 +679,7 @@ async function saveDestination() {
     const data = await response.json();
 
     if (!response.ok || !data.ok) {
-      throw new Error(data.error || "Nao foi possivel salvar a pasta");
+      throw new Error(data.error || "Não foi possível salvar a pasta");
     }
 
     currentDestination.textContent = data.destinationDir;
@@ -1032,12 +1032,12 @@ async function renewQrCode() {
   await postSessionAction(
     "/api/session/renew",
     renewQrButton,
-    "QR Code renovado. O codigo antigo e o PIN antigo nao funcionam mais."
+    "QR Code renovado. O código antigo e o PIN antigo não funcionam mais."
   );
 }
 
 async function endSession() {
-  const confirmed = window.confirm("Encerrar esta sessao? O QR atual, PIN, links e lista de recebidos serao limpos.");
+  const confirmed = window.confirm("Encerrar esta sessão? O QR atual, PIN, links e lista de recebidos serão limpos.");
   if (!confirmed) return;
 
   shareResult.classList.add("hidden");
@@ -1045,7 +1045,7 @@ async function endSession() {
   await postSessionAction(
     "/api/session/end",
     endSessionButton,
-    "Sessao encerrada. Um novo QR Code e um novo PIN foram gerados."
+    "Sessão encerrada. Um novo QR Code e um novo PIN foram gerados."
   );
 }
 
@@ -1224,7 +1224,7 @@ shareDropZone.addEventListener("dragleave", (event) => {
 shareDropZone.addEventListener("drop", (event) => {
   handleShareDrop(event).catch((error) => {
     shareDropZone.classList.remove("drag-over");
-    shareEtaLabel.textContent = error.message || "nao foi possivel ler os arquivos";
+    shareEtaLabel.textContent = error.message || "não foi possível ler os arquivos";
   });
 });
 
@@ -1271,7 +1271,7 @@ if (notePasteButton) {
       setNoteStatus("Texto colado");
       setTimeout(() => setNoteStatus("Sincronizado"), 1200);
     } catch {
-      setNoteStatus("Nao foi possivel colar");
+      setNoteStatus("Não foi possível colar");
       setTimeout(() => setNoteStatus("Sincronizado"), 1200);
     }
   });
@@ -1322,23 +1322,23 @@ pinToggleButton.addEventListener("click", async () => {
     }
     if (data.state) applyState(data.state);
   } catch (error) {
-    showQrNotice(error.message || "Nao foi possivel alterar o PIN");
+    showQrNotice(error.message || "Não foi possível alterar o PIN");
   } finally {
     pinToggleButton.disabled = false;
   }
 });
 
 clearHistoryButton.addEventListener("click", () => {
-  if (!window.confirm("Limpar historico de recebidos? Os links de download serao perdidos.")) return;
+  if (!window.confirm("Limpar histórico de recebidos? Os links de download serão perdidos.")) return;
   fetch(sessionUrl("/api/history/clear"), { method: "POST" }).catch(() => {});
 });
 
 renewQrButton.addEventListener("click", () => {
-  renewQrCode().catch((error) => showQrNotice(error.message || "Nao foi possivel renovar o QR Code"));
+  renewQrCode().catch((error) => showQrNotice(error.message || "Não foi possível renovar o QR Code"));
 });
 
 endSessionButton.addEventListener("click", () => {
-  endSession().catch((error) => showQrNotice(error.message || "Nao foi possivel encerrar a sessao"));
+  endSession().catch((error) => showQrNotice(error.message || "Não foi possível encerrar a sessão"));
 });
 
 sharedNote.addEventListener("input", scheduleNoteSave);
@@ -1371,7 +1371,7 @@ notifyEnabled = loadNotifyPreference();
 updateNotifyButton();
 updateSessionStatus();
 loadConfig().catch(() => {
-  qrLoader.textContent = "Nao foi possivel gerar o QR Code";
+  qrLoader.textContent = "Não foi possível gerar o QR Code";
 });
 setShareControls(false);
 resetShareProgress();

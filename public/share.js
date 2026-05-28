@@ -47,14 +47,14 @@ async function loadSharedFile() {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok || data.ok === false) {
-    throw new Error(data.error || "Arquivo indisponivel ou link expirado");
+    throw new Error(data.error || "Arquivo indisponível ou link expirado");
   }
 
   const files = normalizeFiles(data);
   const totalSize = Number(data.totalSize ?? data.size ?? files.reduce((total, file) => total + Number(file.size || 0), 0));
 
   shareStatus.textContent = "Pronto";
-  downloadFileName.textContent = files.length === 1 ? files[0].fileName : `${files.length} arquivos disponiveis`;
+  downloadFileName.textContent = files.length === 1 ? files[0].fileName : `${files.length} arquivos disponíveis`;
   downloadFileSize.textContent = files.length === 1 ? formatBytes(files[0].size) : `${formatBytes(totalSize)} no total`;
 
   if (data.zipDownloadUrl) {
@@ -85,8 +85,8 @@ themeToggle.addEventListener("click", () => {
 applyTheme(preferredTheme(), themeToggle);
 
 loadSharedFile().catch((error) => {
-  shareStatus.textContent = "Indisponivel";
-  downloadFileName.textContent = "Nao foi possivel abrir este arquivo";
+  shareStatus.textContent = "Indisponível";
+  downloadFileName.textContent = "Não foi possível abrir este arquivo";
   downloadFileSize.textContent = "--";
   downloadFileButton.classList.add("hidden");
   downloadList.classList.add("hidden");

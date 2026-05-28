@@ -22,7 +22,7 @@ const HOST = "0.0.0.0";
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
 const DEFAULT_UPLOAD_DIR = path.join(ROOT, "recebidos");
-const SETTINGS_FILE = path.join(ROOT, "transferencia-config.json");
+const SETTINGS_FILE = path.join(ROOT, "transferência-config.json");
 const CHUNK_SIZE = 1024 * 1024;
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const MOBILE_AUTH_TTL_MS = SESSION_TTL_MS;
@@ -42,7 +42,7 @@ const sseClients = new Set();
 const sessions = new Map();
 let uploadDir = DEFAULT_UPLOAD_DIR;
 
-const EXPIRED_QR_MESSAGE = "QR Code expirado. Atualize a pagina no computador e escaneie novamente.";
+const EXPIRED_QR_MESSAGE = "QR Code expirado. Atualize a página no computador e escaneie novamente.";
 const PIN_REQUIRED_MESSAGE = "Digite o PIN mostrado no computador para continuar.";
 
 function getLanAddresses() {
@@ -325,7 +325,7 @@ async function loadSettings() {
     }
   } catch (error) {
     if (error.code !== "ENOENT") {
-      console.warn("Nao foi possivel carregar a configuracao:", error.message);
+      console.warn("Não foi possível carregar a configuracao:", error.message);
     }
   }
 }
@@ -472,7 +472,7 @@ function requireLocalRequest(req, res) {
 
   writeJson(res, 403, {
     ok: false,
-    error: "Esta acao so pode ser feita no computador que esta rodando o app."
+    error: "Esta acao só pode ser feita no computador que esta rodando o app."
   });
   return false;
 }
@@ -498,7 +498,7 @@ function readJsonBody(req, limit = 32 * 1024) {
         const raw = Buffer.concat(chunks).toString("utf8").trim();
         resolve(raw ? JSON.parse(raw) : {});
       } catch {
-        reject(new Error("JSON invalido"));
+        reject(new Error("JSON inválido"));
       }
     });
 
@@ -539,7 +539,7 @@ async function listFolders(folderPath) {
 
   const current = path.resolve(folderPath);
   const stat = await fsp.stat(current);
-  if (!stat.isDirectory()) throw new Error("O caminho informado nao e uma pasta");
+  if (!stat.isDirectory()) throw new Error("O caminho informado não e uma pasta");
 
   const root = path.parse(current).root;
   const entries = await fsp.readdir(current, { withFileTypes: true });
@@ -604,7 +604,7 @@ function disconnectMobileClients(session, message) {
 }
 
 function renewSessionAccess(session) {
-  disconnectMobileClients(session, "QR Code renovado. Escaneie o novo codigo no computador.");
+  disconnectMobileClients(session, "QR Code renovado. Escaneie o novo código no computador.");
   session.key = createSessionKey();
   session.pin = createSessionPin();
   session.mobileAuthTokens.clear();
@@ -835,7 +835,7 @@ async function serveStatic(res, filePath) {
     res.end(body);
   } catch (error) {
     if (error.code === "ENOENT") {
-      serveText(res, 404, "Arquivo nao encontrado");
+      serveText(res, 404, "Arquivo não encontrado");
       return;
     }
     serveText(res, 500, "Erro ao carregar arquivo");
@@ -1035,14 +1035,14 @@ async function main() {
     const addresses = getLanAddresses();
 
     console.log("");
-    console.log("Transferencia por QR Code");
+    console.log("Transferência por QR Code");
     console.log(`Computador: http://localhost:${PORT}`);
-    console.log("Abra o painel no computador para gerar um QR Code exclusivo desta sessao.");
+    console.log("Abra o painel no computador para gerar um QR Code exclusivo desta sessão.");
     for (const item of addresses) {
       console.log(`Rede ${item.name}: ${item.url}`);
     }
     console.log("");
-    console.log("Arquivos recebidos serao salvos em:");
+    console.log("Arquivos recebidos serão salvos em:");
     console.log(uploadDir);
     console.log("");
   });

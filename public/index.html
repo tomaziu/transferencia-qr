@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Transferencia por QR Code</title>
+    <title>Transferência por QR Code</title>
     <link rel="stylesheet" href="/assets/styles.css">
     <script src="/assets/shared.js" defer></script>
     <script src="/assets/app.js" defer></script>
@@ -14,7 +14,7 @@
         <div class="hero-copy">
           <p class="eyebrow">Rede local</p>
           <h1>Receber arquivos</h1>
-          <p class="lede">Escaneie o QR Code com o celular e acompanhe a transferencia em tempo real.</p>
+          <p class="lede">Escaneie o QR Code com o celular e acompanhe a transferência em tempo real.</p>
         </div>
 
         <div class="status-strip" aria-live="polite">
@@ -61,7 +61,7 @@
             </div>
           </div>
 
-          <div class="qr-status-grid" aria-label="Status da sessao">
+          <div class="qr-status-grid" aria-label="Status da sessão">
             <div>
               <span>QR</span>
               <strong id="qrStatusText">Ativo</strong>
@@ -71,7 +71,7 @@
               <strong id="pinStatusText">Ligado</strong>
             </div>
             <div>
-              <span>Sessao</span>
+              <span>Sessão</span>
               <strong id="sessionAgeText">--</strong>
             </div>
           </div>
@@ -89,8 +89,8 @@
           <div class="address-list" id="addressList"></div>
 
           <div class="qr-actions">
-            <button id="renewQrButton" type="button" class="secondary-button compact-button has-tooltip" title="Troca o QR Code e o PIN, mas mantem historico, bloco de notas e arquivos preparados." data-tooltip="Troca o QR Code e o PIN. Mantem historico, bloco de notas e arquivos preparados.">Renovar QR</button>
-            <button id="endSessionButton" type="button" class="secondary-button compact-button danger-button has-tooltip" title="Faz um reset geral: troca QR/PIN e limpa historico, links antigos, bloco de notas e temporarios." data-tooltip="Reset geral. Troca QR/PIN e limpa historico, links antigos, bloco de notas e temporarios.">Encerrar sessao</button>
+            <button id="renewQrButton" type="button" class="secondary-button compact-button has-tooltip" title="Troca o QR Code e o PIN, mas mantem histórico, bloco de notas e arquivos preparados." data-tooltip="Troca o QR Code e o PIN. Mantem histórico, bloco de notas e arquivos preparados.">Renovar QR</button>
+            <button id="endSessionButton" type="button" class="secondary-button compact-button danger-button has-tooltip" title="Faz um reset geral: troca QR/PIN e limpa histórico, links antigos, bloco de notas e temporarios." data-tooltip="Reset geral. Troca QR/PIN e limpa histórico, links antigos, bloco de notas e temporarios.">Encerrar sessão</button>
           </div>
 
           <div class="device-box" id="deviceBox">
@@ -129,7 +129,7 @@
             </div>
           </div>
 
-          <div class="progress-track" aria-label="Progresso da transferencia">
+          <div class="progress-track" aria-label="Progresso da transferência">
             <span class="progress-fill" id="progressFill"></span>
           </div>
 
@@ -158,7 +158,7 @@
               <h3>Recebidos</h3>
               <div class="history-heading-actions">
                 <span id="historyCount">0</span>
-                <button id="clearHistoryButton" type="button" class="text-button" hidden>Limpar historico</button>
+                <button id="clearHistoryButton" type="button" class="text-button" hidden>Limpar histórico</button>
                 <a id="downloadBundleButton" class="download-bundle-button" hidden>Baixar tudo (.zip)</a>
               </div>
             </div>

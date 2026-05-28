@@ -31,7 +31,7 @@ function createShareHelpers({ sanitizeFileName }) {
       .filter(Boolean);
     const first = roots[0];
     const sameRoot = first && roots.every((root) => root === first);
-    return `${sameRoot ? sanitizeFileName(first) : "arquivos"}-transferencia.zip`;
+    return `${sameRoot ? sanitizeFileName(first) : "arquivos"}-transferência.zip`;
   }
 
   return {

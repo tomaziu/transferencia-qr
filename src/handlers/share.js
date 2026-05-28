@@ -62,7 +62,7 @@ function createShareHandlers({
     const session = getOrCreateSession(url.searchParams.get("session"));
 
     if (req.method !== "POST") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
@@ -100,7 +100,7 @@ function createShareHandlers({
     } catch (error) {
       writeJson(res, 400, {
         ok: false,
-        error: `Nao foi possivel preparar o arquivo: ${error.message || "erro desconhecido"}`
+        error: `Não foi possível preparar o arquivo: ${error.message || "erro desconhecido"}`
       });
     }
   }
@@ -147,7 +147,7 @@ function createShareHandlers({
     const session = getOrCreateSession(url.searchParams.get("session"));
 
     if (req.method !== "POST") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
@@ -159,7 +159,7 @@ function createShareHandlers({
     try {
       meta = await readShareMeta(session, id);
     } catch {
-      writeJson(res, 404, { ok: false, error: "Compartilhamento nao iniciado", received: 0 });
+      writeJson(res, 404, { ok: false, error: "Compartilhamento não iniciado", received: 0 });
       req.resume();
       return;
     }
@@ -219,7 +219,7 @@ function createShareHandlers({
     const session = getOrCreateSession(url.searchParams.get("session"));
 
     if (req.method !== "POST") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
@@ -278,7 +278,7 @@ function createShareHandlers({
     } catch (error) {
       writeJson(res, 400, {
         ok: false,
-        error: `Nao foi possivel gerar o download de "${meta?.fileName || "arquivo"}": ${error.message || "erro desconhecido"}`
+        error: `Não foi possível gerar o download de "${meta?.fileName || "arquivo"}": ${error.message || "erro desconhecido"}`
       });
     }
   }
@@ -287,7 +287,7 @@ function createShareHandlers({
     const session = getOrCreateSession(url.searchParams.get("session"));
 
     if (req.method !== "POST") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
@@ -305,7 +305,7 @@ function createShareHandlers({
 
       const files = ids.map((id) => session.sharedFiles.get(id));
       if (files.some((file) => !file)) {
-        writeJson(res, 404, { ok: false, error: "Um ou mais arquivos nao estao disponiveis" });
+        writeJson(res, 404, { ok: false, error: "Um ou mais arquivos não estão disponíveis" });
         return;
       }
 
@@ -344,7 +344,7 @@ function createShareHandlers({
     } catch (error) {
       writeJson(res, 400, {
         ok: false,
-        error: `Nao foi possivel gerar o pacote de arquivos: ${error.message || "erro desconhecido"}`
+        error: `Não foi possível gerar o pacote de arquivos: ${error.message || "erro desconhecido"}`
       });
     }
   }
@@ -353,7 +353,7 @@ function createShareHandlers({
     const session = getOrCreateSession(url.searchParams.get("session"));
 
     if (req.method !== "POST" && req.method !== "DELETE") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
@@ -375,21 +375,21 @@ function createShareHandlers({
     } catch (error) {
       writeJson(res, 400, {
         ok: false,
-        error: `Nao foi possivel cancelar o compartilhamento: ${error.message || "erro desconhecido"}`
+        error: `Não foi possível cancelar o compartilhamento: ${error.message || "erro desconhecido"}`
       });
     }
   }
 
   async function handleShareInfo(req, res, url) {
     if (req.method !== "GET") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       return;
     }
 
     if (url.searchParams.has("bundle")) {
       const bundleMatch = getShareBundleFromUrl(url);
       if (!bundleMatch) {
-        writeJson(res, 404, { ok: false, error: "Arquivos indisponiveis ou link expirado" });
+        writeJson(res, 404, { ok: false, error: "Arquivos indisponíveis ou link expirado" });
         return;
       }
 
@@ -412,7 +412,7 @@ function createShareHandlers({
 
     const match = getSharedFileFromUrl(url);
     if (!match) {
-      writeJson(res, 404, { ok: false, error: "Arquivo indisponivel ou link expirado" });
+      writeJson(res, 404, { ok: false, error: "Arquivo indisponível ou link expirado" });
       return;
     }
 
@@ -432,13 +432,13 @@ function createShareHandlers({
 
   async function handleShareBundleDownload(req, res, url) {
     if (req.method !== "GET") {
-      serveText(res, 405, "Metodo nao permitido");
+      serveText(res, 405, "Método não permitido");
       return;
     }
 
     const match = getShareBundleFromUrl(url);
     if (!match) {
-      serveText(res, 404, "Arquivos indisponiveis ou link expirado");
+      serveText(res, 404, "Arquivos indisponíveis ou link expirado");
       return;
     }
 
@@ -446,7 +446,7 @@ function createShareHandlers({
       await sendZip(res, shareBundleZipName(match.files), match.files);
     } catch (error) {
       if (!res.headersSent) {
-        serveText(res, 404, error.message || "Arquivos indisponiveis");
+        serveText(res, 404, error.message || "Arquivos indisponíveis");
       } else {
         res.destroy(error);
       }
@@ -455,13 +455,13 @@ function createShareHandlers({
 
   async function handleShareDownload(req, res, url) {
     if (req.method !== "GET") {
-      serveText(res, 405, "Metodo nao permitido");
+      serveText(res, 405, "Método não permitido");
       return;
     }
 
     const match = getSharedFileFromUrl(url);
     if (!match) {
-      serveText(res, 404, "Arquivo indisponivel ou link expirado");
+      serveText(res, 404, "Arquivo indisponível ou link expirado");
       return;
     }
 
@@ -469,7 +469,7 @@ function createShareHandlers({
 
     try {
       const stat = await fsp.stat(file.targetPath);
-      if (!stat.isFile()) throw new Error("Arquivo indisponivel");
+      if (!stat.isFile()) throw new Error("Arquivo indisponível");
 
       res.writeHead(200, {
         "content-type": "application/octet-stream",
@@ -480,7 +480,7 @@ function createShareHandlers({
 
       fs.createReadStream(file.targetPath).pipe(res);
     } catch {
-      serveText(res, 404, "Arquivo indisponivel");
+      serveText(res, 404, "Arquivo indisponível");
     }
   }
 

@@ -15,7 +15,7 @@ function createAdminHandlers({ writeJson, readJsonBody, requireLocalRequest, upl
     }
 
     if (req.method !== "POST") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       return;
     }
 
@@ -29,7 +29,7 @@ function createAdminHandlers({ writeJson, readJsonBody, requireLocalRequest, upl
 
       await fsp.mkdir(destinationDir, { recursive: true });
       const stat = await fsp.stat(destinationDir);
-      if (!stat.isDirectory()) throw new Error("O caminho informado nao e uma pasta");
+      if (!stat.isDirectory()) throw new Error("O caminho informado não e uma pasta");
 
       uploadDir = destinationDir;
       await saveSettings();
@@ -41,7 +41,7 @@ function createAdminHandlers({ writeJson, readJsonBody, requireLocalRequest, upl
     } catch (error) {
       writeJson(res, 400, {
         ok: false,
-        error: error.message || "Nao foi possivel salvar a pasta"
+        error: error.message || "Não foi possível salvar a pasta"
       });
     }
   }
@@ -57,7 +57,7 @@ function createAdminHandlers({ writeJson, readJsonBody, requireLocalRequest, upl
     } catch (error) {
       writeJson(res, 400, {
         ok: false,
-        error: error.message || "Nao foi possivel abrir esta pasta"
+        error: error.message || "Não foi possível abrir esta pasta"
       });
     }
   }
@@ -95,7 +95,7 @@ function createAdminHandlers({ writeJson, readJsonBody, requireLocalRequest, upl
 
     const current = path.resolve(folderPath);
     const stat = await fsp.stat(current);
-    if (!stat.isDirectory()) throw new Error("O caminho informado nao e uma pasta");
+    if (!stat.isDirectory()) throw new Error("O caminho informado não e uma pasta");
 
     const root = path.parse(current).root;
     const entries = await fsp.readdir(current, { withFileTypes: true });

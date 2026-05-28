@@ -208,13 +208,13 @@ function showPinPanel(message = "") {
 function showExpiredSession(message) {
   noteEventsStopped = true;
   saveMobileAuthToken("");
-  phoneConnectionLabel.textContent = "Sessao expirada";
+  phoneConnectionLabel.textContent = "Sessão expirada";
   pinPanel.hidden = false;
   transferPanel.hidden = true;
   mobileNotePanel.hidden = true;
   pinInput.disabled = true;
   pinButton.disabled = true;
-  pinMessage.textContent = message || "Sessao expirada. Escaneie o novo QR Code no computador.";
+  pinMessage.textContent = message || "Sessão expirada. Escaneie o novo QR Code no computador.";
 
   if (noteEventSource) {
     noteEventSource.close();
@@ -471,12 +471,12 @@ function updateQueueSummary() {
   const currentIndex = activeFileIndex >= 0 ? activeFileIndex : Math.min(completed, selectedFiles.length - 1);
   const current = selectedFiles[currentIndex];
   const next = selectedFiles.slice(currentIndex + 1).find((file) => file.status !== "done");
-  const verb = sending ? "Enviando" : completed === selectedFiles.length ? "Concluido" : "Pronto";
+  const verb = sending ? "Enviando" : completed === selectedFiles.length ? "Concluído" : "Pronto";
 
   queueSummary.className = "queue-summary";
   queueStep.textContent = `${verb} ${Math.min(currentIndex + 1, selectedFiles.length)} de ${selectedFiles.length}`;
   queueCurrent.textContent = current ? current.name : "Fila pronta";
-  queueNext.textContent = next ? `Proximo: ${next.name}` : completed === selectedFiles.length ? "Todos os arquivos foram enviados." : "Ultimo arquivo da fila.";
+  queueNext.textContent = next ? `Próximo: ${next.name}` : completed === selectedFiles.length ? "Todos os arquivos foram enviados." : "Último arquivo da fila.";
 }
 
 function markQueueState() {
@@ -727,7 +727,7 @@ async function uploadFile(fileInfo) {
     updateItem(fileInfo.id, {
       percent: 100,
       status: "Ja enviado",
-      eta: "concluido",
+      eta: "concluído",
       className: "done",
       fileStatus: "done"
     });
@@ -807,7 +807,7 @@ async function uploadFile(fileInfo) {
   updateItem(fileInfo.id, {
     percent: 100,
     status: duration > 0 ? `Enviado · media ${formatBytes(averageSpeed)}/s` : "Enviado",
-    eta: duration > 0 ? `terminou em ${formatTime(duration)}` : "concluido",
+    eta: duration > 0 ? `terminou em ${formatTime(duration)}` : "concluído",
     className: "done",
     fileStatus: "done"
   });
@@ -947,7 +947,7 @@ if (notePasteButton) {
       setNoteStatus("Texto colado");
       setTimeout(() => setNoteStatus("Sincronizado"), 1200);
     } catch {
-      setNoteStatus("Nao foi possivel colar");
+      setNoteStatus("Não foi possível colar");
       setTimeout(() => setNoteStatus("Sincronizado"), 1200);
     }
   });

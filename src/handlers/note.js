@@ -24,7 +24,7 @@ function createNoteHandlers({ writeJson, readJsonBody, sessionFromKeyOrId, sessi
     }
 
     if (req.method !== "POST") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
@@ -45,7 +45,7 @@ function createNoteHandlers({ writeJson, readJsonBody, sessionFromKeyOrId, sessi
     } catch (error) {
       writeJson(res, 400, {
         ok: false,
-        error: `Nao foi possivel salvar a anotacao: ${error.message || "erro desconhecido"}`
+        error: `Não foi possível salvar a anotacao: ${error.message || "erro desconhecido"}`
       });
     }
   }

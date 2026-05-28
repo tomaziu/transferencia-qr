@@ -40,7 +40,7 @@ function parseSendUrl(rawValue) {
 
 function goToSendTarget(target) {
   if (!target) {
-    setEntryMessage("Link invalido. Use o endereco completo com /send?key=...", true);
+    setEntryMessage("Link inválido. Use o endereco completo com /send?key=...", true);
     return;
   }
 
@@ -57,7 +57,7 @@ async function ensureJsQR() {
     script.src = "/assets/jsqr.js";
     script.async = true;
     script.onload = () => resolve(window.jsQR);
-    script.onerror = () => reject(new Error("Nao foi possivel carregar o leitor de QR"));
+    script.onerror = () => reject(new Error("Não foi possível carregar o leitor de QR"));
     document.head.append(script);
   });
 
@@ -147,14 +147,14 @@ async function scanWithJsQR(video) {
 
 async function startScanner() {
   if (!navigator.mediaDevices?.getUserMedia) {
-    setEntryMessage("Seu navegador nao suporta camera. Cole o link do QR abaixo.", true);
+    setEntryMessage("Seu navegador não suporta câmera. Cole o link do QR abaixo.", true);
     return;
   }
 
   setEntryMessage("");
   startScanButton.hidden = true;
   scannerShell.classList.remove("hidden");
-  scannerStatus.textContent = "Solicitando permissao da camera...";
+  scannerStatus.textContent = "Solicitando permissao da câmera...";
 
   try {
     scanStream = await navigator.mediaDevices.getUserMedia({
@@ -177,7 +177,7 @@ async function startScanner() {
 
     const target = parseSendUrl(rawValue);
     if (!target) {
-      scannerStatus.textContent = "QR lido, mas o link nao e valido. Tente de novo.";
+      scannerStatus.textContent = "QR lido, mas o link não e válido. Tente de novo.";
       stopScanner();
       startScanButton.hidden = false;
       return;
@@ -190,22 +190,22 @@ async function startScanner() {
     startScanButton.hidden = false;
 
     if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") {
-      setEntryMessage("Permissao da camera negada. Voce pode colar o link do QR abaixo.", true);
+      setEntryMessage("Permissao da câmera negada. Você pode colar o link do QR abaixo.", true);
       return;
     }
 
-    setEntryMessage(error.message || "Nao foi possivel abrir a camera.", true);
+    setEntryMessage(error.message || "Não foi possível abrir a câmera.", true);
   }
 }
 
 startScanButton.addEventListener("click", () => {
-  startScanner().catch((error) => setEntryMessage(error.message || "Erro ao iniciar a camera.", true));
+  startScanner().catch((error) => setEntryMessage(error.message || "Erro ao iniciar a câmera.", true));
 });
 
 stopScanButton.addEventListener("click", () => {
   stopScanner();
   startScanButton.hidden = false;
-  scannerStatus.textContent = "Camera fechada.";
+  scannerStatus.textContent = "Câmera fechada.";
 });
 
 openLinkButton.addEventListener("click", () => {

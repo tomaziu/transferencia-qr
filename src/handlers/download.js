@@ -7,7 +7,7 @@ const { sendZip } = require("../zip");
 function createDownloadHandlers({ serveText, sessions, contentDisposition, safeSessionId }) {
   async function handleDownload(req, res, url) {
     if (req.method !== "GET") {
-      serveText(res, 405, "Metodo nao permitido");
+      serveText(res, 405, "Método não permitido");
       return;
     }
 
@@ -17,13 +17,13 @@ function createDownloadHandlers({ serveText, sessions, contentDisposition, safeS
     const file = session?.completedFiles.get(id);
 
     if (!file || file.downloadToken !== token) {
-      serveText(res, 404, "Arquivo nao encontrado");
+      serveText(res, 404, "Arquivo não encontrado");
       return;
     }
 
     try {
       const stat = await fsp.stat(file.targetPath);
-      if (!stat.isFile()) throw new Error("Arquivo indisponivel");
+      if (!stat.isFile()) throw new Error("Arquivo indisponível");
 
       const previewType = url.searchParams.get("preview") === "1"
         ? (imagePreviewContentType(file.savedName || file.fileName) || mediaPreviewContentType(file.savedName || file.fileName))
@@ -38,19 +38,19 @@ function createDownloadHandlers({ serveText, sessions, contentDisposition, safeS
 
       fs.createReadStream(file.targetPath).pipe(res);
     } catch {
-      serveText(res, 404, "Arquivo indisponivel");
+      serveText(res, 404, "Arquivo indisponível");
     }
   }
 
   async function handleDownloadBundle(req, res, url) {
     if (req.method !== "GET") {
-      serveText(res, 405, "Metodo nao permitido");
+      serveText(res, 405, "Método não permitido");
       return;
     }
 
     const session = sessions.get(safeSessionId(url.searchParams.get("session")));
     if (!session) {
-      serveText(res, 404, "Sessao nao encontrada");
+      serveText(res, 404, "Sessão não encontrada");
       return;
     }
 
@@ -66,14 +66,14 @@ function createDownloadHandlers({ serveText, sessions, contentDisposition, safeS
     for (let i = 0; i < ids.length; i += 1) {
       const file = session.completedFiles.get(ids[i]);
       if (!file || file.downloadToken !== tokens[i]) {
-        serveText(res, 404, "Um ou mais arquivos nao encontrados");
+        serveText(res, 404, "Um ou mais arquivos não encontrados");
         return;
       }
       files.push({ fileName: file.savedName, targetPath: file.targetPath });
     }
 
     try {
-      const zipName = files.length === 1 ? path.basename(files[0].fileName, path.extname(files[0].fileName)) + ".zip" : "arquivos-transferencia.zip";
+      const zipName = files.length === 1 ? path.basename(files[0].fileName, path.extname(files[0].fileName)) + ".zip" : "arquivos-transferência.zip";
       await sendZip(res, zipName, files);
     } catch (error) {
       if (!res.headersSent) {

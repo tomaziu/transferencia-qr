@@ -194,7 +194,7 @@ async function prepareZipEntries(files) {
 
   for (const file of files) {
     const stat = await fsp.stat(file.targetPath);
-    if (!stat.isFile()) throw new Error("Arquivo indisponivel");
+    if (!stat.isFile()) throw new Error("Arquivo indisponível");
 
     const baseName = zipEntryName(file.fileName);
     const parsed = path.posix.parse(baseName);

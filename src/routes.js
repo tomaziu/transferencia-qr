@@ -291,7 +291,7 @@ function createRoute({
       return;
     }
 
-    serveText(res, 404, "Nao encontrado");
+    serveText(res, 404, "Não encontrado");
   };
 }
 

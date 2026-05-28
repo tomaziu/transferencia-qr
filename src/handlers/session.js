@@ -33,7 +33,7 @@ function createSessionHandlers({
     }
 
     if (req.method !== "POST") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
@@ -55,7 +55,7 @@ function createSessionHandlers({
       const pin = String(body.pin || "").replace(/\D/g, "");
 
       if (pin !== session.pin) {
-        writeJson(res, 403, { ok: false, error: "PIN incorreto. Confira o codigo no computador." });
+        writeJson(res, 403, { ok: false, error: "PIN incorreto. Confira o código no computador." });
         return;
       }
 
@@ -75,7 +75,7 @@ function createSessionHandlers({
     } catch (error) {
       writeJson(res, 400, {
         ok: false,
-        error: error.message || "Nao foi possivel validar o PIN"
+        error: error.message || "Não foi possível validar o PIN"
       });
     }
   }
@@ -99,7 +99,7 @@ function createSessionHandlers({
 
   async function handlePinToggle(req, res, url) {
     if (req.method !== "POST") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
@@ -125,7 +125,7 @@ function createSessionHandlers({
 
   async function handleSessionRenew(req, res, url) {
     if (req.method !== "POST") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
@@ -144,13 +144,13 @@ function createSessionHandlers({
 
   async function handleSessionEnd(req, res, url) {
     if (req.method !== "POST") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
 
     const session = getOrCreateSession(url.searchParams.get("session"));
-    disconnectMobileClients(session, "Sessao encerrada no computador. Escaneie um novo QR Code.");
+    disconnectMobileClients(session, "Sessão encerrada no computador. Escaneie um novo QR Code.");
     await clearSessionData(session, {
       clearNote: true,
       deleteReceivedFiles: isHostedEnvironment()
@@ -168,7 +168,7 @@ function createSessionHandlers({
 
   async function handleHistoryClear(req, res, url) {
     if (req.method !== "POST" && req.method !== "DELETE") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
@@ -187,7 +187,7 @@ function createSessionHandlers({
 
   async function handleDisconnectMobile(req, res, url) {
     if (req.method !== "POST") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
@@ -204,7 +204,7 @@ function createSessionHandlers({
       const client = session.mobileClients.get(clientId);
 
       if (!client) {
-        writeJson(res, 404, { ok: false, error: "Aparelho nao encontrado" });
+        writeJson(res, 404, { ok: false, error: "Aparelho não encontrado" });
         return;
       }
 
@@ -216,7 +216,7 @@ function createSessionHandlers({
       broadcastEvent(
         session,
         "expired",
-        { expired: true, error: "Sessao removida pelo computador." },
+        { expired: true, error: "Sessão removida pelo computador." },
         matchesClient
       );
 
@@ -247,7 +247,7 @@ function createSessionHandlers({
     } catch (error) {
       writeJson(res, 400, {
         ok: false,
-        error: error.message || "Nao foi possivel remover o aparelho"
+        error: error.message || "Não foi possível remover o aparelho"
       });
     }
   }

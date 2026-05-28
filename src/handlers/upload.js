@@ -32,7 +32,7 @@ function createUploadHandlers({
     if (!session) return;
 
     if (req.method !== "POST") {
-      serveText(res, 405, "Metodo nao permitido");
+      serveText(res, 405, "Método não permitido");
       req.resume();
       return;
     }
@@ -130,7 +130,7 @@ function createUploadHandlers({
     if (!session) return;
 
     if (req.method !== "POST") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
@@ -200,7 +200,7 @@ function createUploadHandlers({
     } catch (error) {
       writeJson(res, 400, {
         ok: false,
-        error: `Nao foi possivel iniciar o envio: ${error.message || "erro desconhecido"}`
+        error: `Não foi possível iniciar o envio: ${error.message || "erro desconhecido"}`
       });
     }
   }
@@ -241,7 +241,7 @@ function createUploadHandlers({
     if (!session) return;
 
     if (req.method !== "POST" && req.method !== "DELETE") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
@@ -263,7 +263,7 @@ function createUploadHandlers({
     } catch (error) {
       writeJson(res, 400, {
         ok: false,
-        error: error.message || "Nao foi possivel descartar o envio"
+        error: error.message || "Não foi possível descartar o envio"
       });
     }
   }
@@ -273,7 +273,7 @@ function createUploadHandlers({
     if (!session) return;
 
     if (req.method !== "POST") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
@@ -285,7 +285,7 @@ function createUploadHandlers({
     try {
       meta = await readUploadMeta(session, id);
     } catch {
-      writeJson(res, 404, { ok: false, error: "Envio nao iniciado", received: 0 });
+      writeJson(res, 404, { ok: false, error: "Envio não iniciado", received: 0 });
       req.resume();
       return;
     }
@@ -373,7 +373,7 @@ function createUploadHandlers({
     if (!session) return;
 
     if (req.method !== "POST") {
-      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      writeJson(res, 405, { ok: false, error: "Método não permitido" });
       req.resume();
       return;
     }
@@ -448,7 +448,7 @@ function createUploadHandlers({
     } catch (error) {
       writeJson(res, 400, {
         ok: false,
-        error: `Nao foi possivel finalizar o envio de "${meta?.fileName || "arquivo"}": ${error.message || "erro desconhecido"}`
+        error: `Não foi possível finalizar o envio de "${meta?.fileName || "arquivo"}": ${error.message || "erro desconhecido"}`
       });
     }
   }
