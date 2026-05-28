@@ -25,7 +25,6 @@ const DEFAULT_UPLOAD_DIR = path.join(ROOT, "recebidos");
 const SETTINGS_FILE = path.join(ROOT, "transferencia-config.json");
 const CHUNK_SIZE = 1024 * 1024;
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
-const NOTE_MAX_LENGTH = 20000;
 const MOBILE_AUTH_TTL_MS = SESSION_TTL_MS;
 const PIN_DIGITS = 6;
 
@@ -921,7 +920,7 @@ const { handleShareStart, handleShareStatus, handleShareChunk, handleShareFinish
   shareBundleUrlForRequest
 });
 
-const { handlePinVerify, handlePinStatus, handlePinToggle, handleSessionRenew, handleSessionEnd, handleHistoryClear } = createSessionHandlers({
+const { handlePinVerify, handlePinStatus, handlePinToggle, handleSessionRenew, handleSessionEnd, handleHistoryClear, handleDisconnectMobile } = createSessionHandlers({
   writeJson,
   readJsonBody,
   getOrCreateSession,
@@ -941,7 +940,9 @@ const { handlePinVerify, handlePinStatus, handlePinToggle, handleSessionRenew, h
   hasValidMobileAuth,
   mobileAuthTokenFromRequest,
   createMobileAuthToken,
-  touchSession
+  touchSession,
+  broadcastEvent,
+  sseClients
 });
 
 const { handleDownload, handleDownloadBundle } = createDownloadHandlers({
@@ -967,7 +968,6 @@ const { handleNote } = createNoteHandlers({
   sessionByKey,
   broadcastState,
   publicState,
-  NOTE_MAX_LENGTH,
   touchSession
 });
 

@@ -919,6 +919,28 @@ noteCopyButton.addEventListener("click", async () => {
   setTimeout(() => setNoteStatus("Sincronizado"), 1200);
 });
 
+const notePasteButton = document.getElementById("notePasteButton");
+if (notePasteButton) {
+  notePasteButton.addEventListener("click", async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const start = sharedNote.selectionStart;
+      const end = sharedNote.selectionEnd;
+      const before = sharedNote.value.slice(0, start);
+      const after = sharedNote.value.slice(end);
+      sharedNote.value = before + text + after;
+      sharedNote.selectionStart = sharedNote.selectionEnd = start + text.length;
+      sharedNote.dispatchEvent(new Event("input", { bubbles: true }));
+      sharedNote.focus();
+      setNoteStatus("Texto colado");
+      setTimeout(() => setNoteStatus("Sincronizado"), 1200);
+    } catch {
+      setNoteStatus("Nao foi possivel colar");
+      setTimeout(() => setNoteStatus("Sincronizado"), 1200);
+    }
+  });
+}
+
 sharedNote.addEventListener("input", scheduleNoteSave);
 sharedNote.addEventListener("blur", () => {
   clearTimeout(noteSaveTimer);

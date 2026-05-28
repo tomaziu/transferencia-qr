@@ -20,6 +20,7 @@ function createRoute({
   handleSessionRenew,
   handleSessionEnd,
   handleHistoryClear,
+  handleDisconnectMobile,
   sessionFromKeyOrId,
   sessionByKey,
   EXPIRED_QR_MESSAGE,
@@ -130,6 +131,11 @@ function createRoute({
 
     if (url.pathname === "/api/history/clear") {
       await handleHistoryClear(req, res, url);
+      return;
+    }
+
+    if (url.pathname === "/api/session/disconnect-mobile") {
+      await handleDisconnectMobile(req, res, url);
       return;
     }
 

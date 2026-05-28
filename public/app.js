@@ -281,7 +281,26 @@ function renderMobilePresence(mobile) {
     meta.textContent = `conectado ${formatSessionAge(client.connectedAt)}`;
     info.append(name, meta);
 
-    row.append(dot, info);
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "secondary-button compact-button";
+    removeBtn.textContent = "Remover";
+    removeBtn.addEventListener("click", async () => {
+      try {
+        const res = await fetch("/api/session/disconnect-mobile?session=" + encodeURIComponent(receiverSessionId), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ clientId: client.id })
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          alert(data.error || "Nao foi possivel remover o aparelho");
+        }
+      } catch {
+        alert("Erro ao remover aparelho");
+      }
+    });
+
+    row.append(dot, info, removeBtn);
     deviceList.append(row);
   }
 }
@@ -1213,6 +1232,28 @@ noteCopyButton.addEventListener("click", async () => {
   setNoteStatus("Texto copiado");
   setTimeout(() => setNoteStatus("Sincronizado"), 1200);
 });
+
+const notePasteButton = document.getElementById("notePasteButton");
+if (notePasteButton) {
+  notePasteButton.addEventListener("click", async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const start = sharedNote.selectionStart;
+      const end = sharedNote.selectionEnd;
+      const before = sharedNote.value.slice(0, start);
+      const after = sharedNote.value.slice(end);
+      sharedNote.value = before + text + after;
+      sharedNote.selectionStart = sharedNote.selectionEnd = start + text.length;
+      sharedNote.dispatchEvent(new Event("input", { bubbles: true }));
+      sharedNote.focus();
+      setNoteStatus("Texto colado");
+      setTimeout(() => setNoteStatus("Sincronizado"), 1200);
+    } catch {
+      setNoteStatus("Nao foi possivel colar");
+      setTimeout(() => setNoteStatus("Sincronizado"), 1200);
+    }
+  });
+}
 
 themeToggle.addEventListener("click", () => {
   const currentTheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";

@@ -1,6 +1,6 @@
 const { EXPIRED_QR_MESSAGE, PIN_REQUIRED_MESSAGE } = require("./constants");
 
-function createNoteHandlers({ writeJson, readJsonBody, sessionFromKeyOrId, sessionByKey, broadcastState, publicState, NOTE_MAX_LENGTH, touchSession }) {
+function createNoteHandlers({ writeJson, readJsonBody, sessionFromKeyOrId, sessionByKey, broadcastState, publicState, touchSession }) {
   async function handleNote(req, res, url) {
     const session = sessionFromKeyOrId(req, url, { requireMobileAuth: true });
     if (!session) {
@@ -30,8 +30,8 @@ function createNoteHandlers({ writeJson, readJsonBody, sessionFromKeyOrId, sessi
     }
 
     try {
-      const body = await readJsonBody(req, 64 * 1024);
-      const text = String(body.text || "").slice(0, NOTE_MAX_LENGTH);
+      const body = await readJsonBody(req, 1024 * 1024);
+      const text = String(body.text || "");
 
       session.noteText = text;
       session.noteUpdatedAt = Date.now();

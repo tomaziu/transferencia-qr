@@ -20,7 +20,9 @@ function createSessionHandlers({
   hasValidMobileAuth,
   mobileAuthTokenFromRequest,
   createMobileAuthToken,
-  touchSession
+  touchSession,
+  broadcastEvent,
+  sseClients
 }) {
   async function handlePinVerify(req, res, url) {
     const session = sessionByKey(url);
@@ -185,13 +187,65 @@ function createSessionHandlers({
     });
   }
 
+  async function handleDisconnectMobile(req, res, url) {
+    if (!requireLocalRequest(req, res)) return;
+
+    if (req.method !== "POST") {
+      writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
+      req.resume();
+      return;
+    }
+
+    try {
+      const body = await readJsonBody(req);
+      const clientId = String(body.clientId || "");
+      if (!clientId) {
+        writeJson(res, 400, { ok: false, error: "Informe o ID do aparelho" });
+        return;
+      }
+
+      const session = getOrCreateSession(url.searchParams.get("session"));
+      const client = session.mobileClients.get(clientId);
+
+      if (!client) {
+        writeJson(res, 404, { ok: false, error: "Aparelho nao encontrado" });
+        return;
+      }
+
+      broadcastEvent(
+        session,
+        "expired",
+        { expired: true, error: "Sessao removida pelo computador." },
+        (c) => c.role === "mobile" && c.mobileClientId === clientId
+      );
+
+      for (const c of Array.from(sseClients)) {
+        if (c.sessionId === session.id && c.role === "mobile" && c.mobileClientId === clientId) {
+          c.res.end();
+          sseClients.delete(c);
+        }
+      }
+
+      session.mobileClients.delete(clientId);
+      broadcastState(session);
+
+      writeJson(res, 200, { ok: true });
+    } catch (error) {
+      writeJson(res, 400, {
+        ok: false,
+        error: error.message || "Nao foi possivel remover o aparelho"
+      });
+    }
+  }
+
   return {
     handlePinVerify,
     handlePinStatus,
     handlePinToggle,
     handleSessionRenew,
     handleSessionEnd,
-    handleHistoryClear
+    handleHistoryClear,
+    handleDisconnectMobile
   };
 }
 
