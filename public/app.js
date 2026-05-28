@@ -287,21 +287,28 @@ function renderMobilePresence(mobile) {
     removeBtn.title = "Remover aparelho";
     removeBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><path d="M18 6 6 18M6 6l12 12"/></svg>';
     removeBtn.addEventListener("click", async () => {
+      removeBtn.disabled = true;
       try {
-        const res = await fetch("/api/session/disconnect-mobile?session=" + encodeURIComponent(receiverSessionId), {
+        const res = await fetch(sessionUrl("/api/session/disconnect-mobile"), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ clientId: client.id })
         });
+        const data = await res.json().catch(() => ({}));
         if (res.ok) {
-          const stateRes = await fetch(sessionUrl("/api/state"));
-          if (stateRes.ok) applyState(await stateRes.json());
-        } else {
-          const data = await res.json().catch(() => ({}));
-          alert(data.error || "Nao foi possivel remover o aparelho");
+          if (data.state) {
+            applyState(data.state);
+          } else {
+            const stateRes = await fetch(sessionUrl("/api/state"));
+            if (stateRes.ok) applyState(await stateRes.json());
+          }
+          return;
         }
+        alert(data.error || "Nao foi possivel remover o aparelho");
       } catch {
         alert("Erro ao remover aparelho");
+      } finally {
+        removeBtn.disabled = false;
       }
     });
 

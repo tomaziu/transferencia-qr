@@ -206,6 +206,7 @@ function showPinPanel(message = "") {
 }
 
 function showExpiredSession(message) {
+  noteEventsStopped = true;
   saveMobileAuthToken("");
   phoneConnectionLabel.textContent = "Sessao expirada";
   pinPanel.hidden = false;
@@ -307,18 +308,29 @@ async function verifyStoredAuth() {
   }
 }
 
+let noteEventsStopped = false;
+
 function connectNoteEvents() {
   if (noteEventSource) noteEventSource.close();
 
+  noteEventsStopped = false;
   const source = new EventSource(authenticatedUrl("/events"));
   noteEventSource = source;
 
   source.addEventListener("open", () => setNoteStatus("Sincronizado"));
-  source.addEventListener("error", () => setNoteStatus("Reconectando..."));
+  source.addEventListener("error", () => {
+    if (noteEventsStopped || !mobileAuthToken) {
+      source.close();
+      if (noteEventSource === source) noteEventSource = null;
+      return;
+    }
+    setNoteStatus("Reconectando...");
+  });
   source.addEventListener("state", (event) => {
     renderSharedNote(JSON.parse(event.data).note);
   });
   source.addEventListener("expired", (event) => {
+    noteEventsStopped = true;
     const data = JSON.parse(event.data || "{}");
     showExpiredSession(data.error);
   });

@@ -188,6 +188,8 @@ function createSessionHandlers({
   }
 
   async function handleDisconnectMobile(req, res, url) {
+    if (!requireLocalRequest(req, res)) return;
+
     if (req.method !== "POST") {
       writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
       req.resume();
@@ -196,7 +198,7 @@ function createSessionHandlers({
 
     try {
       const body = await readJsonBody(req);
-      const clientId = String(body.clientId || "");
+      const clientId = String(body.clientId || "").trim();
       if (!clientId) {
         writeJson(res, 400, { ok: false, error: "Informe o ID do aparelho" });
         return;
@@ -210,24 +212,42 @@ function createSessionHandlers({
         return;
       }
 
+      const authToken = String(client.authToken || "");
+      const matchesClient = (connection) =>
+        connection.role === "mobile" &&
+        (connection.mobileClientId === clientId || (authToken && connection.authToken === authToken));
+
       broadcastEvent(
         session,
         "expired",
         { expired: true, error: "Sessao removida pelo computador." },
-        (c) => c.role === "mobile" && c.mobileClientId === clientId
+        matchesClient
       );
 
-      for (const c of Array.from(sseClients)) {
-        if (c.sessionId === session.id && c.role === "mobile" && c.mobileClientId === clientId) {
-          c.res.end();
-          sseClients.delete(c);
+      for (const connection of Array.from(sseClients)) {
+        if (connection.sessionId === session.id && matchesClient(connection)) {
+          connection.res.end();
+          sseClients.delete(connection);
         }
       }
 
+      if (authToken) {
+        session.mobileAuthTokens.delete(authToken);
+      }
+
       session.mobileClients.delete(clientId);
+      if (authToken) {
+        for (const [id, entry] of session.mobileClients) {
+          if (entry.authToken === authToken) {
+            session.mobileClients.delete(id);
+          }
+        }
+      }
+
+      touchSession(session);
       broadcastState(session);
 
-      writeJson(res, 200, { ok: true });
+      writeJson(res, 200, { ok: true, state: publicState(session) });
     } catch (error) {
       writeJson(res, 400, {
         ok: false,

@@ -991,6 +991,8 @@ const route = createRoute({
   handleSessionRenew,
   handleSessionEnd,
   handleHistoryClear,
+  handleDisconnectMobile,
+  mobileAuthTokenFromRequest,
   sessionFromKeyOrId,
   sessionByKey,
   EXPIRED_QR_MESSAGE,

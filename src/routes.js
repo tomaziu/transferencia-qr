@@ -21,6 +21,7 @@ function createRoute({
   handleSessionEnd,
   handleHistoryClear,
   handleDisconnectMobile,
+  mobileAuthTokenFromRequest,
   sessionFromKeyOrId,
   sessionByKey,
   EXPIRED_QR_MESSAGE,
@@ -160,13 +161,15 @@ function createRoute({
       });
       const role = hasMobileKey ? "mobile" : "desktop";
       const mobileClientId = role === "mobile" ? crypto.randomUUID() : null;
-      const client = { res, sessionId: session.id, role, mobileClientId };
+      const authToken = role === "mobile" ? mobileAuthTokenFromRequest(req, url) : "";
+      const client = { res, sessionId: session.id, role, mobileClientId, authToken };
       sseClients.add(client);
       if (role === "mobile") {
         session.mobileClients.set(mobileClientId, {
           label: deviceLabelFromUserAgent(req.headers["user-agent"]),
           connectedAt: Date.now(),
-          lastSeen: Date.now()
+          lastSeen: Date.now(),
+          authToken
         });
         broadcastState(session);
       }

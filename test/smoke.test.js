@@ -308,6 +308,44 @@ test("mobile presence lists connected devices", async () => {
   await response.body?.cancel().catch(() => {});
 });
 
+test("desktop can disconnect a connected phone", async () => {
+  const { key, auth, sessionId } = await getSendCredentials();
+  const controller = new AbortController();
+  const stream = fetch(`${baseUrl}/events?key=${key}&auth=${auth}`, {
+    signal: controller.signal,
+    headers: {
+      "user-agent": "Mozilla/5.0 (Linux; Android 14; Pixel 8 Build/UP1A) AppleWebKit/537.36 Mobile Safari/537.36"
+    }
+  });
+
+  const response = await stream;
+  assert.equal(response.status, 200);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const stateBefore = await fetch(`${baseUrl}/api/state?session=${sessionId}`);
+  const before = await stateBefore.json();
+  assert.equal(before.mobile.clients.length, 1);
+  const clientId = before.mobile.clients[0].id;
+
+  const disconnect = await fetch(`${baseUrl}/api/session/disconnect-mobile?session=${sessionId}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ clientId })
+  });
+  assert.equal(disconnect.status, 200);
+  const disconnected = await disconnect.json();
+  assert.equal(disconnected.ok, true);
+  assert.equal(disconnected.state.mobile.clients.length, 0);
+
+  const status = await fetch(`${baseUrl}/api/pin/status?key=${key}&auth=${auth}`);
+  assert.equal(status.status, 200);
+  const statusData = await status.json();
+  assert.equal(statusData.verified, false);
+
+  controller.abort();
+  await response.body?.cancel().catch(() => {});
+});
+
 test("desktop can clear received history and old download links", async () => {
   const { key, auth, sessionId } = await getSendCredentials();
   const id = `clear-history-${Date.now()}`;
