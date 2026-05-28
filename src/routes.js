@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const path = require("path");
+const { isMobileUserAgent } = require("./mobile-detect");
 
 function createRoute({
   PUBLIC_DIR,
@@ -52,6 +53,21 @@ function createRoute({
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
 
     if (url.pathname === "/") {
+      const key = url.searchParams.get("key");
+      if (key) {
+        res.writeHead(302, {
+          location: `/send?key=${encodeURIComponent(key)}`
+        });
+        res.end();
+        return;
+      }
+
+      const forceDesktop = url.searchParams.get("desktop") === "1";
+      if (!forceDesktop && isMobileUserAgent(req)) {
+        await serveStatic(res, path.join(PUBLIC_DIR, "mobile.html"));
+        return;
+      }
+
       await serveStatic(res, path.join(PUBLIC_DIR, "index.html"));
       return;
     }

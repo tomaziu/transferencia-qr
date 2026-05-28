@@ -193,6 +193,121 @@ h3 {
   margin-top: 14px;
 }
 
+.mobile-entry .phone-shell {
+  gap: 18px;
+}
+
+.mobile-scan-panel h2 {
+  margin: 0 0 8px;
+}
+
+.scan-hint {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.scanner-shell {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 4px;
+}
+
+.scanner-shell video {
+  width: 100%;
+  max-height: 52vh;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #000;
+  object-fit: cover;
+}
+
+.scanner-frame {
+  position: absolute;
+  top: 12%;
+  right: 10%;
+  bottom: 28%;
+  left: 10%;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 18px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.scanner-status {
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.mobile-divider {
+  display: grid;
+  place-items: center;
+  margin: 18px 0 14px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.mobile-divider::before,
+.mobile-divider::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--line);
+}
+
+.mobile-divider {
+  position: relative;
+}
+
+.mobile-divider span {
+  position: relative;
+  z-index: 1;
+  padding: 0 10px;
+  background: var(--panel);
+}
+
+.mobile-link-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+.mobile-link-field input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 92%, var(--bg));
+  color: var(--ink);
+  font: inherit;
+}
+
+.mobile-footer-note {
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.mobile-footer-note a {
+  color: var(--blue);
+  font-weight: 800;
+}
+
+.pin-message.error {
+  color: var(--danger);
+}
+
 .text-button {
   min-height: 30px;
   padding: 0 10px;

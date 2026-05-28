@@ -97,7 +97,11 @@ async function getSendCredentials() {
 }
 
 test("GET / serves the desktop page", async () => {
-  const response = await fetch(`${baseUrl}/`);
+  const response = await fetch(`${baseUrl}/`, {
+    headers: {
+      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36"
+    }
+  });
   assert.equal(response.status, 200);
   const body = await response.text();
   assert.match(body, /Receber arquivos/);
@@ -139,6 +143,32 @@ test("GET /send with key serves folder-capable sender page", async () => {
   assert.match(body, /folderInput/);
   assert.match(body, /webkitdirectory/);
   assert.match(body, /sharedNote/);
+});
+
+test("mobile user agent gets sender landing with camera option", async () => {
+  const response = await fetch(`${baseUrl}/`, {
+    headers: {
+      "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148"
+    }
+  });
+  assert.equal(response.status, 200);
+  const body = await response.text();
+  assert.match(body, /Enviar arquivos/);
+  assert.match(body, /Abrir camera e ler QR/);
+  assert.match(body, /mobile\.js/);
+  assert.doesNotMatch(body, /id="qrImage"/);
+});
+
+test("mobile root with key redirects to send page", async () => {
+  const key = await getSendKey();
+  const response = await fetch(`${baseUrl}/?key=${encodeURIComponent(key)}`, {
+    redirect: "manual",
+    headers: {
+      "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148"
+    }
+  });
+  assert.equal(response.status, 302);
+  assert.match(response.headers.get("location") || "", /\/send\?key=/);
 });
 
 test("GET /send without key shows expired page", async () => {

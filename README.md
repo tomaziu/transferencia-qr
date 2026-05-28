@@ -21,6 +21,8 @@ Acesse a versão hospedada:
 
 Na versão online, cada navegador que abre o painel recebe um QR Code próprio. Os arquivos enviados por aquele QR aparecem apenas naquela sessão, evitando que outras pessoas vejam seus downloads.
 
+Se você abrir o mesmo link **no celular**, verá uma tela de envio (não o painel do PC), com opção de **ler o QR Code pela câmera** ou colar o link manualmente. No computador, use `/?desktop=1` se precisar forçar o painel de recebimento em um celular.
+
 ## Recursos
 
 - QR Code exclusivo por sessão.
@@ -33,6 +35,7 @@ Na versão online, cada navegador que abre o painel recebe um QR Code próprio. 
 - Compartilhamento de um ou vários arquivos do PC para o celular por QR Code.
 - Arrastar e soltar arquivos ou pastas na área de envio do PC.
 - Lista de aparelhos conectados, com identificação básica como Android, iPhone ou modelo detectado.
+- Página mobile dedicada na hospedagem: leitura de QR pela câmera ou entrada por link.
 - Barra de progresso com velocidade e tempo restante.
 - Resultado final com tempo total e velocidade média.
 - Prévia de imagens recebidas no histórico para `.jpg`, `.png` e `.webp`.

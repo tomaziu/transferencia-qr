@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Enviar arquivos</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+    <script src="/assets/shared.js" defer></script>
+    <script src="/assets/mobile.js" defer></script>
+  </head>
+  <body class="mobile mobile-entry">
+    <main class="phone-shell">
+      <section class="phone-hero">
+        <p class="eyebrow">Celular</p>
+        <h1>Enviar arquivos</h1>
+        <p class="lede">Escaneie o QR Code exibido no computador ou cole o link para comecar o envio.</p>
+        <button id="themeToggle" type="button" class="theme-toggle mobile-theme-toggle" aria-pressed="false">Tema escuro</button>
+      </section>
+
+      <section class="send-panel mobile-scan-panel">
+        <p class="eyebrow">Conectar</p>
+        <h2>Ler QR Code</h2>
+        <p class="scan-hint">Permita o acesso a camera quando o navegador pedir.</p>
+
+        <button id="startScanButton" type="button" class="primary-button">Abrir camera e ler QR</button>
+
+        <div class="scanner-shell hidden" id="scannerShell">
+          <video id="scannerVideo" playsinline muted aria-label="Camera para ler QR Code"></video>
+          <div class="scanner-frame" aria-hidden="true"></div>
+          <p class="scanner-status" id="scannerStatus" role="status">Aponte para o QR Code no computador</p>
+          <button id="stopScanButton" type="button" class="secondary-button">Fechar camera</button>
+        </div>
+
+        <div class="mobile-divider" role="separator" aria-hidden="true"><span>ou</span></div>
+
+        <label class="mobile-link-field">
+          <span>Colar link do QR</span>
+          <input id="linkInput" type="url" inputmode="url" autocomplete="off" placeholder="http://.../send?key=...">
+        </label>
+        <button id="openLinkButton" type="button" class="secondary-button">Entrar com link</button>
+        <p class="pin-message" id="entryMessage" role="alert"></p>
+      </section>
+
+      <p class="mobile-footer-note">
+        Vai <strong>receber</strong> arquivos no computador?
+        <a href="/?desktop=1">Abrir painel do PC</a>
+      </p>
+    </main>
+  </body>
+</html>
