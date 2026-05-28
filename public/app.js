@@ -293,7 +293,10 @@ function renderMobilePresence(mobile) {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ clientId: client.id })
         });
-        if (!res.ok) {
+        if (res.ok) {
+          const stateRes = await fetch(sessionUrl("/api/state"));
+          if (stateRes.ok) applyState(await stateRes.json());
+        } else {
           const data = await res.json().catch(() => ({}));
           alert(data.error || "Nao foi possivel remover o aparelho");
         }

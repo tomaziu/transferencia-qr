@@ -570,7 +570,7 @@ function broadcastState(session) {
 
   for (const client of sseClients) {
     if (client.sessionId === session.id) {
-      client.res.write(payload);
+      try { client.res.write(payload); } catch {}
     }
   }
 }
@@ -580,7 +580,7 @@ function broadcastEvent(session, eventName, payload, filter = () => true) {
 
   for (const client of sseClients) {
     if (client.sessionId === session.id && filter(client)) {
-      client.res.write(body);
+      try { client.res.write(body); } catch {}
     }
   }
 }
