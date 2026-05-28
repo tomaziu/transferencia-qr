@@ -794,6 +794,14 @@ h3 {
   gap: 8px;
 }
 
+.pin-box.pin-box--off #sessionPin {
+  display: none;
+}
+
+.pin-box.pin-box--off .pin-value-row {
+  justify-content: flex-end;
+}
+
 .pin-toggle-btn {
   min-height: 36px !important;
   padding: 0 10px !important;

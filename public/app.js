@@ -341,9 +341,19 @@ function hideQrNotice() {
 
 function renderSessionPin() {
   const pinLabel = pinBox.querySelector("span");
-  const pinHidden = !pinEnabled || !currentSessionPin;
-  sessionPin.textContent = pinHidden ? (pinEnabled ? "******" : "---") : (pinVisible ? currentSessionPin : "******");
-  sessionPin.style.opacity = pinEnabled ? "1" : "0.4";
+  pinBox.classList.toggle("pin-box--off", !pinEnabled);
+
+  if (pinEnabled) {
+    const pinHidden = !currentSessionPin;
+    sessionPin.hidden = false;
+    sessionPin.textContent = pinHidden ? "******" : pinVisible ? currentSessionPin : "******";
+    sessionPin.style.opacity = "1";
+  } else {
+    sessionPin.hidden = true;
+    sessionPin.textContent = "";
+    sessionPin.style.opacity = "";
+  }
+
   pinVisibilityButton.hidden = !pinEnabled;
   pinToggleButton.textContent = pinEnabled ? "Desligar PIN" : "Ligar PIN";
   pinToggleButton.classList.toggle("danger-button", pinEnabled);
