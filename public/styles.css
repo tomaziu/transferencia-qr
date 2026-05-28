@@ -618,7 +618,7 @@ h3 {
 
 .device-item {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr);
+  grid-template-columns: 10px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
   border: 1px solid rgba(15, 143, 134, 0.22);

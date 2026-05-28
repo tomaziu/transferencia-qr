@@ -282,8 +282,10 @@ function renderMobilePresence(mobile) {
     info.append(name, meta);
 
     const removeBtn = document.createElement("button");
-    removeBtn.className = "secondary-button compact-button";
-    removeBtn.textContent = "Remover";
+    removeBtn.className = "icon-button";
+    removeBtn.setAttribute("aria-label", "Remover aparelho");
+    removeBtn.title = "Remover aparelho";
+    removeBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><path d="M18 6 6 18M6 6l12 12"/></svg>';
     removeBtn.addEventListener("click", async () => {
       try {
         const res = await fetch("/api/session/disconnect-mobile?session=" + encodeURIComponent(receiverSessionId), {
