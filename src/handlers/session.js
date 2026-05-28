@@ -98,8 +98,6 @@ function createSessionHandlers({
   }
 
   async function handlePinToggle(req, res, url) {
-    if (!requireLocalRequest(req, res)) return;
-
     if (req.method !== "POST") {
       writeJson(res, 405, { ok: false, error: "Metodo nao permitido" });
       req.resume();

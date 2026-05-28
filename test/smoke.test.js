@@ -229,6 +229,21 @@ test("shared note syncs between phone key and desktop session", async () => {
   assert.equal(data.note.text, text);
 });
 
+test("pin toggle works on hosted-style requests", async () => {
+  const configResponse = await fetch(`${baseUrl}/api/config`);
+  const config = await configResponse.json();
+
+  const toggle = await fetch(`${baseUrl}/api/pin/toggle?session=${encodeURIComponent(config.sessionId)}`, {
+    method: "POST",
+    headers: { host: "transferencia-qr.onrender.com" }
+  });
+  assert.equal(toggle.status, 200);
+
+  const data = await toggle.json();
+  assert.equal(data.ok, true);
+  assert.equal(data.pinEnabled, false);
+});
+
 test("desktop can renew QR and invalidate old phone access", async () => {
   const { key, auth, sessionId } = await getSendCredentials();
 
