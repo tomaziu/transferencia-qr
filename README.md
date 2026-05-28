@@ -25,32 +25,15 @@ Se você abrir o mesmo link **no celular**, verá uma tela de envio (não o pain
 
 ## Recursos
 
-- QR Code exclusivo por sessão.
-- PIN de segurança mostrado no computador antes de liberar o celular.
-- Botões para renovar o QR Code ou encerrar a sessão atual.
-- Envio de um ou vários arquivos em fila.
-- Seleção de pasta com preservação de subpastas quando o navegador informa o caminho relativo.
-- Bloco de notas compartilhado entre computador e celular em tempo real.
-- Botão para copiar o texto do bloco de notas nos dois lados.
-- Compartilhamento de um ou vários arquivos do PC para o celular por QR Code.
-- Arrastar e soltar arquivos ou pastas na área de envio do PC.
-- Lista de aparelhos conectados, com identificação básica como Android, iPhone ou modelo detectado.
-- Página mobile dedicada na hospedagem: leitura de QR pela câmera ou entrada por link.
-- Barra de progresso com velocidade e tempo restante.
-- Resultado final com tempo total e velocidade média.
-- Prévia de imagens recebidas no histórico para `.jpg`, `.png` e `.webp`.
-- Lista organizada para muitos arquivos, com total, tamanho combinado e opção de recolher/expandir.
-- Status visual da sessão com QR ativo, PIN ligado/desligado e tempo desde a criação.
-- Aviso sonoro e notificação do navegador quando transferências terminam.
-- Retomada de envio quando a internet falha, enquanto o servidor continuar ativo.
-- Botão para parar o envio atual.
-- Opção para descartar um envio pausado.
-- Limpeza do histórico de recebidos da sessão.
-- Aviso de celular conectado ou desconectado.
-- Tema claro/escuro salvo no navegador.
-- Avisos para arquivos grandes em MB/GB.
-- Download pelo navegador na versão hospedada.
-- Escolha de pasta de destino quando rodando localmente no computador.
+- **Sessão exclusiva:** QR Code único e PIN de segurança, com renovação ou encerramento a qualquer momento.
+- **Envio para o PC:** um ou vários arquivos em fila, com preservação de subpastas.
+- **Compartilhamento do PC para o celular:** selecione arquivos/pastas ou arraste e solte; um QR Code é gerado para o celular baixar.
+- **Bloco de notas:** sincronizado em tempo real entre computador e celular, com botão para copiar o texto.
+- **Conexão por QR ou link:** página mobile com leitura pela câmera ou colagem manual do link.
+- **Progresso completo:** barra com velocidade e tempo restante, resultado com tempo total e média, prévia de imagens recebidas, e notificação sonora ao terminar.
+- **Transferência resiliente:** retomada automática em caso de queda de internet, botão para parar ou descartar o envio.
+- **Painel do computador:** status visual da sessão, lista de aparelhos conectados, limpeza de histórico, tema claro/escuro salvo, e escolha da pasta de destino (modo local).
+- **Hospedado:** download pelo navegador; ideal para arquivos pequenos/médios sem instalação.
 
 ## Instalação Local
 
