@@ -138,7 +138,11 @@ function saveNotifyPreference(value) {
 }
 
 function updateNotifyButton() {
-  notifyButton.textContent = notifyEnabled ? "Avisos ligados" : "Ativar avisos";
+  const bellOn = notifyButton.querySelector(".bell-on");
+  const bellOff = notifyButton.querySelector(".bell-off");
+  bellOn.style.display = notifyEnabled ? "" : "none";
+  bellOff.style.display = notifyEnabled ? "none" : "";
+  notifyButton.setAttribute("aria-label", notifyEnabled ? "Avisos ligados" : "Ativar avisos");
   notifyButton.setAttribute("aria-pressed", String(notifyEnabled));
 }
 
