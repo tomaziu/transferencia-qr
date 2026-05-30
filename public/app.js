@@ -1386,13 +1386,18 @@ connectEvents();
 setInterval(checkQrCodeFreshness, 15000);
 setInterval(updateSessionStatus, 30000);
 
+const statsCard = document.querySelector(".stats-card");
+
 async function loadStats() {
   try {
     const res = await fetch("/api/stats");
     const data = await res.json();
     if (data.ok) {
-      document.getElementById("statsUploads").textContent = data.totalUploads;
-      document.getElementById("statsDevices").textContent = data.totalMobileConnected;
+      const uploadsEl = document.getElementById("statsUploads");
+      const devicesEl = document.getElementById("statsDevices");
+      if (uploadsEl) uploadsEl.textContent = data.totalUploads;
+      if (devicesEl) devicesEl.textContent = data.totalMobileConnected;
+      if (statsCard) statsCard.hidden = false;
     }
   } catch {}
 }

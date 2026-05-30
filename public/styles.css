@@ -1010,6 +1010,56 @@ h3 {
   stroke-linejoin: round;
 }
 
+.stats-card {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.stats-card .eyebrow {
+  margin-bottom: 10px;
+}
+
+.stats-numbers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stat {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--panel) 84%, var(--bg));
+  text-align: center;
+}
+
+.stat strong {
+  display: block;
+  color: var(--teal-dark);
+  font-size: 2rem;
+  line-height: 1.1;
+}
+
+.stat span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.phone-stats {
+  display: block !important;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+
+.phone-stats strong {
+  color: var(--teal-dark);
+}
+
 .destination-box {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 44px;
