@@ -959,6 +959,34 @@ sharedNote.addEventListener("blur", () => {
   saveSharedNote();
 });
 
+const homeButton = document.querySelector("#homeButton");
+
+function disconnectAndGoHome() {
+  stopRequested = true;
+
+  if (noteEventSource) {
+    noteEventSource.close();
+    noteEventSource = null;
+  }
+
+  if (activeChunkRequest) {
+    activeChunkRequest.abort();
+  }
+
+  saveMobileAuthToken("");
+
+  if (activeFileId) {
+    cancelUploadOnServer(activeFileId).catch(() => {});
+  }
+
+  window.location.href = "/";
+}
+
+homeButton.addEventListener("click", (event) => {
+  event.preventDefault();
+  disconnectAndGoHome();
+});
+
 if (!("webkitdirectory" in folderInput)) {
   folderPicker.classList.add("hidden");
 }

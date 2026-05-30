@@ -1385,3 +1385,17 @@ if (!("webkitdirectory" in shareFolderInput)) {
 connectEvents();
 setInterval(checkQrCodeFreshness, 15000);
 setInterval(updateSessionStatus, 30000);
+
+async function loadStats() {
+  try {
+    const res = await fetch("/api/stats");
+    const data = await res.json();
+    if (data.ok) {
+      document.getElementById("statsUploads").textContent = data.totalUploads;
+      document.getElementById("statsDevices").textContent = data.totalMobileConnected;
+    }
+  } catch {}
+}
+
+loadStats();
+setInterval(loadStats, 30000);

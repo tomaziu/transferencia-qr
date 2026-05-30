@@ -47,6 +47,7 @@ function createRoute({
   handleShareInfo,
   handleShareDownload,
   handleShareBundleDownload,
+  handleStats,
   serveText
 }) {
   return async function route(req, res) {
@@ -103,6 +104,11 @@ function createRoute({
     if (url.pathname === "/api/state") {
       const session = getOrCreateSession(url.searchParams.get("session"));
       writeJson(res, 200, publicState(session));
+      return;
+    }
+
+    if (url.pathname === "/api/stats") {
+      handleStats(req, res);
       return;
     }
 

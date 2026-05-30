@@ -408,6 +408,21 @@ h3 {
   text-decoration: underline;
 }
 
+.stats-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 16px;
+}
+
+.stats-row strong {
+  color: var(--ink);
+}
+
+.stats-sep {
+  color: var(--line);
+}
+
 .qr-panel,
 .transfer-panel,
 .send-panel,

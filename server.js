@@ -40,6 +40,11 @@ const mimeTypes = new Map([
 
 const sseClients = new Set();
 const sessions = new Map();
+const globalStats = {
+  totalUploads: 0,
+  totalMobileConnected: 0,
+  startedAt: Date.now()
+};
 let uploadDir = DEFAULT_UPLOAD_DIR;
 
 const EXPIRED_QR_MESSAGE = "QR Code expirado. Atualize a página no computador e escaneie novamente.";
@@ -812,6 +817,8 @@ function rememberCompletedUpload(session, { id, fileName, savedName, targetPath,
   });
   session.history.splice(12);
 
+  globalStats.totalUploads++;
+
   return downloadUrl;
 }
 
@@ -864,6 +871,18 @@ function requireUploadSession(req, res, url, { json = true } = {}) {
   }
   req.resume();
   return null;
+}
+
+const onMobileConnected = () => { globalStats.totalMobileConnected++; };
+
+function handleStats(req, res) {
+  writeJson(res, 200, {
+    ok: true,
+    totalUploads: globalStats.totalUploads,
+    totalMobileConnected: globalStats.totalMobileConnected,
+    startedAt: globalStats.startedAt,
+    uptime: Date.now() - globalStats.startedAt
+  });
 }
 
 // --- Handler instances from modules ---
@@ -942,7 +961,8 @@ const { handlePinVerify, handlePinStatus, handlePinToggle, handleSessionRenew, h
   createMobileAuthToken,
   touchSession,
   broadcastEvent,
-  sseClients
+  sseClients,
+  onMobileConnected
 });
 
 const { handleDownload, handleDownloadBundle } = createDownloadHandlers({
@@ -1017,6 +1037,7 @@ const route = createRoute({
   handleShareInfo,
   handleShareDownload,
   handleShareBundleDownload,
+  handleStats,
   serveText
 });
 

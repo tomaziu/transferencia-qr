@@ -22,7 +22,8 @@ function createSessionHandlers({
   createMobileAuthToken,
   touchSession,
   broadcastEvent,
-  sseClients
+  sseClients,
+  onMobileConnected
 }) {
   async function handlePinVerify(req, res, url) {
     const session = sessionByKey(url);
@@ -47,6 +48,7 @@ function createSessionHandlers({
           label: deviceLabelFromUserAgent(req.headers["user-agent"])
         });
         touchSession(session);
+        if (onMobileConnected) onMobileConnected();
         writeJson(res, 200, { ok: true, auth, pinEnabled: false, note: publicState(session).note });
         return;
       }
@@ -66,6 +68,7 @@ function createSessionHandlers({
         label: deviceLabelFromUserAgent(req.headers["user-agent"])
       });
       touchSession(session);
+      if (onMobileConnected) onMobileConnected();
 
       writeJson(res, 200, {
         ok: true,
