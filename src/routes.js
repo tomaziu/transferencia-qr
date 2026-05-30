@@ -187,6 +187,11 @@ function createRoute({
       const client = { res, sessionId: session.id, role, mobileClientId, authToken };
       sseClients.add(client);
       if (role === "mobile") {
+        for (const [id, c] of session.mobileClients) {
+          if (c.authToken === authToken) {
+            session.mobileClients.delete(id);
+          }
+        }
         session.mobileClients.set(mobileClientId, {
           label: deviceLabelFromUserAgent(req.headers["user-agent"]),
           connectedAt: Date.now(),
@@ -199,7 +204,9 @@ function createRoute({
       req.on("close", () => {
         sseClients.delete(client);
         if (role === "mobile") {
-          session.mobileClients.delete(mobileClientId);
+          if (session.mobileClients.get(mobileClientId)?.authToken === authToken) {
+            session.mobileClients.delete(mobileClientId);
+          }
           broadcastState(session);
         }
       });
