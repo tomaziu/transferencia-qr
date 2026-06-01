@@ -69,6 +69,9 @@ const shareCopyButton = document.querySelector("#shareCopyButton");
 const sharedNote = document.querySelector("#sharedNote");
 const noteStatus = document.querySelector("#noteStatus");
 const noteCopyButton = document.querySelector("#noteCopyButton");
+const suggestionOpenButton = document.querySelector("#suggestionOpenButton");
+const suggestionModal = document.querySelector("#suggestionModal");
+const suggestionCloseButton = document.querySelector("#suggestionCloseButton");
 const suggestionTitleInput = document.querySelector("#suggestionTitleInput");
 const suggestionType = document.querySelector("#suggestionType");
 const suggestionMessage = document.querySelector("#suggestionMessage");
@@ -675,6 +678,16 @@ function openFolderModal() {
 function closeFolderModal() {
   folderModal.classList.add("hidden");
   folderError.textContent = "";
+}
+
+function openSuggestionModal() {
+  suggestionModal.classList.remove("hidden");
+  setSuggestionStatus("Pronto");
+  setTimeout(() => suggestionTitleInput.focus(), 0);
+}
+
+function closeSuggestionModal() {
+  suggestionModal.classList.add("hidden");
 }
 
 async function saveDestination() {
@@ -1440,6 +1453,12 @@ renewQrButton.addEventListener("click", () => {
 
 endSessionButton.addEventListener("click", () => {
   endSession().catch((error) => showQrNotice(error.message || "Não foi possível encerrar a sessão"));
+});
+
+suggestionOpenButton.addEventListener("click", openSuggestionModal);
+suggestionCloseButton.addEventListener("click", closeSuggestionModal);
+suggestionModal.addEventListener("click", (event) => {
+  if (event.target === suggestionModal) closeSuggestionModal();
 });
 
 sharedNote.addEventListener("input", scheduleNoteSave);

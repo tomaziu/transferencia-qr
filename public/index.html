@@ -193,44 +193,6 @@
         <textarea id="sharedNote" class="shared-note" rows="7" placeholder="Digite aqui para aparecer no celular..."></textarea>
       </section>
 
-      <section class="suggestion-panel" aria-labelledby="suggestionTitle">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Sugestões</p>
-            <h2 id="suggestionTitle">Melhorias para o projeto</h2>
-          </div>
-          <span id="suggestionStatus" class="note-status">Pronto</span>
-        </div>
-
-        <div class="suggestion-grid">
-          <label>
-            <span>Título</span>
-            <input id="suggestionTitleInput" type="text" maxlength="90" placeholder="Ex: modo offline">
-          </label>
-
-          <label>
-            <span>Tipo</span>
-            <select id="suggestionType">
-              <option value="Melhoria">Melhoria</option>
-              <option value="Bug">Bug</option>
-              <option value="Ideia visual">Ideia visual</option>
-              <option value="Segurança">Segurança</option>
-              <option value="Outro">Outro</option>
-            </select>
-          </label>
-
-          <label class="suggestion-wide">
-            <span>Mensagem</span>
-            <textarea id="suggestionMessage" rows="5" maxlength="1800" placeholder="Escreva sua ideia ou problema encontrado..."></textarea>
-          </label>
-        </div>
-
-        <div class="suggestion-actions">
-          <button id="suggestionCopyButton" type="button" class="secondary-button compact-button">Copiar</button>
-          <button id="suggestionSendButton" type="button" class="primary-button compact-button">Enviar sugestão</button>
-        </div>
-      </section>
-
       <section class="pc-share-panel" aria-labelledby="shareTitle">
         <div class="panel-heading">
           <div>
@@ -310,8 +272,57 @@
           <span><strong id="statsDevices">0</strong> celulares</span>
         </span>
         Projeto criado por <a href="https://github.com/tomaziu" target="_blank" rel="noreferrer">Tomaziu</a>
+        <button id="suggestionOpenButton" type="button" class="footer-suggestion-button">Enviar sugestão</button>
       </footer>
     </main>
+
+    <div class="modal-backdrop hidden" id="suggestionModal">
+      <section class="folder-dialog suggestion-dialog" role="dialog" aria-modal="true" aria-labelledby="suggestionTitle">
+        <header class="folder-header">
+          <div>
+            <p class="eyebrow">Sugestões</p>
+            <h2 id="suggestionTitle">Melhorias para o projeto</h2>
+          </div>
+          <button id="suggestionCloseButton" type="button" class="icon-button ghost-button" title="Fechar" aria-label="Fechar">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18 6 6 18"></path>
+              <path d="m6 6 12 12"></path>
+            </svg>
+          </button>
+        </header>
+
+        <div class="suggestion-grid">
+          <label>
+            <span>Título</span>
+            <input id="suggestionTitleInput" type="text" maxlength="90" placeholder="Ex: modo offline">
+          </label>
+
+          <label>
+            <span>Tipo</span>
+            <select id="suggestionType">
+              <option value="Melhoria">Melhoria</option>
+              <option value="Bug">Bug</option>
+              <option value="Ideia visual">Ideia visual</option>
+              <option value="Segurança">Segurança</option>
+              <option value="Outro">Outro</option>
+            </select>
+          </label>
+
+          <label class="suggestion-wide">
+            <span>Mensagem</span>
+            <textarea id="suggestionMessage" rows="5" maxlength="1800" placeholder="Escreva sua ideia ou problema encontrado..."></textarea>
+          </label>
+        </div>
+
+        <footer class="dialog-actions">
+          <span id="suggestionStatus" class="note-status">Pronto</span>
+          <div class="suggestion-actions">
+            <button id="suggestionCopyButton" type="button" class="secondary-button compact-button">Copiar</button>
+            <button id="suggestionSendButton" type="button" class="primary-button compact-button">Enviar sugestão</button>
+          </div>
+        </footer>
+      </section>
+    </div>
 
     <div class="modal-backdrop hidden" id="folderModal">
       <section class="folder-dialog" role="dialog" aria-modal="true" aria-labelledby="folderTitle">

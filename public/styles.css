@@ -410,6 +410,23 @@ h3 {
   text-decoration: underline;
 }
 
+.footer-suggestion-button {
+  margin-left: 12px;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  padding: 0;
+  background: transparent;
+  color: var(--teal-dark);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.footer-suggestion-button:hover,
+.footer-suggestion-button:focus-visible {
+  color: var(--ink);
+}
+
 .stats-row {
   display: inline-flex;
   align-items: center;
@@ -429,7 +446,6 @@ h3 {
 .transfer-panel,
 .send-panel,
 .note-panel,
-.suggestion-panel,
 .pc-share-panel {
   min-width: 0;
   border: 1px solid var(--line);
@@ -441,13 +457,11 @@ h3 {
 .qr-panel,
 .transfer-panel,
 .note-panel,
-.suggestion-panel,
 .pc-share-panel {
   padding: 22px;
 }
 
-.note-panel,
-.suggestion-panel {
+.note-panel {
   display: grid;
   gap: 14px;
   margin-top: 22px;
@@ -1131,6 +1145,11 @@ h3 {
   padding: 18px;
   background: var(--panel);
   box-shadow: 0 24px 80px rgba(16, 32, 48, 0.24);
+}
+
+.suggestion-dialog {
+  width: min(620px, 100%);
+  overflow: auto;
 }
 
 .folder-header,

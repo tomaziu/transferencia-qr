@@ -9,7 +9,7 @@ e este projeto adota [Versionamento Semântico](https://semver.org/spec/v2.0.0.h
 
 ### Adicionado
 
-- Aba de sugestões no painel do computador, com envio para uma Issue do GitHub já preenchida.
+- Atalho discreto de sugestões no rodapé, com envio para uma Issue do GitHub já preenchida.
 - Botão para copiar a sugestão pronta antes de enviar.
 
 ## [1.3.0] - 2026-05-26
