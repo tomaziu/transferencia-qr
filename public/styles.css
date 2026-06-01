@@ -59,7 +59,9 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -427,6 +429,7 @@ h3 {
 .transfer-panel,
 .send-panel,
 .note-panel,
+.suggestion-panel,
 .pc-share-panel {
   min-width: 0;
   border: 1px solid var(--line);
@@ -438,11 +441,13 @@ h3 {
 .qr-panel,
 .transfer-panel,
 .note-panel,
+.suggestion-panel,
 .pc-share-panel {
   padding: 22px;
 }
 
-.note-panel {
+.note-panel,
+.suggestion-panel {
   display: grid;
   gap: 14px;
   margin-top: 22px;
@@ -471,6 +476,75 @@ h3 {
   color: var(--muted);
   font-size: 0.86rem;
   font-weight: 800;
+}
+
+.suggestion-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+  gap: 12px;
+}
+
+.suggestion-grid label {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.suggestion-grid span {
+  color: var(--teal-dark);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.suggestion-grid input,
+.suggestion-grid select,
+.suggestion-grid textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 88%, var(--bg));
+  color: var(--ink);
+  outline: none;
+}
+
+.suggestion-grid input,
+.suggestion-grid select {
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.suggestion-grid textarea {
+  min-height: 130px;
+  resize: vertical;
+  padding: 12px;
+  line-height: 1.5;
+}
+
+.suggestion-grid input:focus,
+.suggestion-grid select:focus,
+.suggestion-grid textarea:focus {
+  border-color: rgba(15, 143, 134, 0.58);
+  box-shadow: 0 0 0 4px rgba(15, 143, 134, 0.12);
+}
+
+.suggestion-wide {
+  grid-column: 1 / -1;
+}
+
+.suggestion-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.suggestion-actions .compact-button {
+  width: auto;
+  min-height: 40px;
+  margin-top: 0;
+  padding: 0 16px;
 }
 
 .pc-share-panel {
@@ -1803,6 +1877,7 @@ h3 {
 
   .pc-share-grid,
   .compact-picker-grid,
+  .suggestion-grid,
   .share-result {
     grid-template-columns: 1fr;
   }
@@ -1907,6 +1982,14 @@ h3 {
 
   .note-actions {
     justify-content: flex-start;
+  }
+
+  .suggestion-actions {
+    justify-content: stretch;
+  }
+
+  .suggestion-actions .compact-button {
+    width: 100%;
   }
 
   .history-item span,

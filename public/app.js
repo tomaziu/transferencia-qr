@@ -69,9 +69,16 @@ const shareCopyButton = document.querySelector("#shareCopyButton");
 const sharedNote = document.querySelector("#sharedNote");
 const noteStatus = document.querySelector("#noteStatus");
 const noteCopyButton = document.querySelector("#noteCopyButton");
+const suggestionTitleInput = document.querySelector("#suggestionTitleInput");
+const suggestionType = document.querySelector("#suggestionType");
+const suggestionMessage = document.querySelector("#suggestionMessage");
+const suggestionStatus = document.querySelector("#suggestionStatus");
+const suggestionCopyButton = document.querySelector("#suggestionCopyButton");
+const suggestionSendButton = document.querySelector("#suggestionSendButton");
 
 const RECEIVER_SESSION_KEY = "transferenciaQrReceiverSession";
 const NOTIFY_KEY = "transferenciaQrNotifyEnabled";
+const SUGGESTION_ISSUE_URL = "https://github.com/tomaziu/transferencia-qr/issues/new";
 const SHARE_CHUNK_SIZE = 1024 * 1024;
 const SHARE_MAX_RETRIES = 3;
 
@@ -1068,11 +1075,72 @@ async function copyTextToClipboard(text, fallbackInput = null) {
   try {
     await navigator.clipboard.writeText(text);
   } catch {
-    if (fallbackInput) {
+    if (fallbackInput && fallbackInput.value === text) {
       fallbackInput.select();
       document.execCommand("copy");
+      return;
     }
+
+    const helper = document.createElement("textarea");
+    helper.value = text;
+    helper.setAttribute("readonly", "");
+    helper.style.position = "fixed";
+    helper.style.left = "-9999px";
+    helper.style.top = "0";
+    document.body.append(helper);
+    helper.select();
+    document.execCommand("copy");
+    helper.remove();
   }
+}
+
+function setSuggestionStatus(text) {
+  suggestionStatus.textContent = text;
+}
+
+function buildSuggestionText() {
+  const title = suggestionTitleInput.value.trim();
+  const type = suggestionType.value;
+  const message = suggestionMessage.value.trim();
+
+  return {
+    title,
+    type,
+    message,
+    issueTitle: `[${type}] ${title}`,
+    issueBody: [
+      `## Tipo`,
+      type,
+      "",
+      "## Sugestão",
+      message,
+      "",
+      "## Página",
+      window.location.href
+    ].join("\n")
+  };
+}
+
+function validateSuggestion() {
+  const suggestion = buildSuggestionText();
+
+  if (!suggestion.title) {
+    setSuggestionStatus("Informe um título");
+    suggestionTitleInput.focus();
+    return null;
+  }
+
+  if (!suggestion.message) {
+    setSuggestionStatus("Escreva a sugestão");
+    suggestionMessage.focus();
+    return null;
+  }
+
+  return suggestion;
+}
+
+function suggestionTextForClipboard(suggestion) {
+  return `${suggestion.issueTitle}\n\n${suggestion.issueBody}`;
 }
 
 copyButton.addEventListener("click", async () => {
@@ -1258,6 +1326,35 @@ noteCopyButton.addEventListener("click", async () => {
   setNoteStatus("Texto copiado");
   setTimeout(() => setNoteStatus("Sincronizado"), 1200);
 });
+
+suggestionCopyButton.addEventListener("click", async () => {
+  const suggestion = validateSuggestion();
+  if (!suggestion) return;
+
+  await copyTextToClipboard(suggestionTextForClipboard(suggestion), suggestionMessage);
+  setSuggestionStatus("Sugestão copiada");
+  setTimeout(() => setSuggestionStatus("Pronto"), 1400);
+});
+
+suggestionSendButton.addEventListener("click", () => {
+  const suggestion = validateSuggestion();
+  if (!suggestion) return;
+
+  const params = new URLSearchParams({
+    title: suggestion.issueTitle,
+    body: suggestion.issueBody
+  });
+  const issueUrl = `${SUGGESTION_ISSUE_URL}?${params.toString()}`;
+  const opened = window.open(issueUrl, "_blank", "noopener,noreferrer");
+  if (!opened) {
+    window.location.href = issueUrl;
+  }
+  setSuggestionStatus("Abrindo GitHub");
+  setTimeout(() => setSuggestionStatus("Pronto"), 1800);
+});
+
+suggestionTitleInput.addEventListener("input", () => setSuggestionStatus("Pronto"));
+suggestionMessage.addEventListener("input", () => setSuggestionStatus("Pronto"));
 
 const notePasteButton = document.getElementById("notePasteButton");
 if (notePasteButton) {

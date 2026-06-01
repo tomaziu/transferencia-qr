@@ -106,6 +106,8 @@ test("GET / serves the desktop page", async () => {
   const body = await response.text();
   assert.match(body, /Receber arquivos/);
   assert.match(body, /sharedNote/);
+  assert.match(body, /suggestionTitleInput/);
+  assert.match(body, /suggestionSendButton/);
   assert.match(body, /shareFolderInput/);
   assert.match(body, /webkitdirectory/);
   assert.match(body, /deviceList/);

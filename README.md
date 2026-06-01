@@ -29,6 +29,7 @@ Se você abrir o mesmo link **no celular**, verá uma tela de envio (não o pain
 - **Envio para o PC:** um ou vários arquivos em fila, com preservação de subpastas.
 - **Compartilhamento do PC para o celular:** selecione arquivos/pastas ou arraste e solte; um QR Code é gerado para o celular baixar.
 - **Bloco de notas:** sincronizado em tempo real entre computador e celular, com botão para copiar o texto.
+- **Sugestões:** formulário no painel que abre uma Issue do GitHub já preenchida para o dono receber ideias de melhoria.
 - **Conexão por QR ou link:** página mobile com leitura pela câmera ou colagem manual do link.
 - **Progresso completo:** barra com velocidade e tempo restante, resultado com tempo total e média, prévia de imagens recebidas, e notificação sonora ao terminar.
 - **Transferência resiliente:** retomada automática em caso de queda de internet, botão para parar ou descartar o envio.
