@@ -27,6 +27,7 @@ const CHUNK_SIZE = 1024 * 1024;
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const MOBILE_AUTH_TTL_MS = SESSION_TTL_MS;
 const PIN_DIGITS = 6;
+const HISTORY_LIMIT = 200;
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -440,7 +441,7 @@ function publicHistoryItem(item) {
 function publicState(session) {
   return {
     active: Array.from(session.activeTransfers.values()).map(formatPublicTransfer),
-    history: session.history.slice(0, 12).map(publicHistoryItem),
+    history: session.history.slice(0, HISTORY_LIMIT).map(publicHistoryItem),
     mobile: publicMobilePresence(session),
     session: {
       id: session.id,
@@ -815,7 +816,7 @@ function rememberCompletedUpload(session, { id, fileName, savedName, targetPath,
     downloadUrl,
     previewUrl
   });
-  session.history.splice(12);
+  session.history.splice(HISTORY_LIMIT);
 
   globalStats.totalUploads++;
 

@@ -298,6 +298,53 @@ test("phone upload preserves folder path in saved name", async () => {
   assert.equal(await download.text(), body.toString());
 });
 
+test("received history and bundle include more than twelve files", async () => {
+  const { key, auth, sessionId } = await getSendCredentials();
+  const stamp = Date.now();
+  const files = Array.from({ length: 13 }, (_, index) => ({
+    id: `many-${stamp}-${index}`,
+    fileName: `arquivo-${stamp}-${String(index + 1).padStart(2, "0")}.txt`,
+    body: Buffer.from(`conteudo ${index + 1}`)
+  }));
+
+  for (const file of files) {
+    const start = await fetch(`${baseUrl}/upload/start?key=${key}&auth=${auth}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: file.id, fileName: file.fileName, size: file.body.length })
+    });
+    assert.equal(start.status, 200);
+
+    const chunk = await fetch(`${baseUrl}/upload/chunk?key=${key}&auth=${auth}&id=${file.id}&offset=0`, {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream" },
+      body: file.body
+    });
+    assert.equal(chunk.status, 200);
+
+    const finish = await fetch(`${baseUrl}/upload/finish?key=${key}&auth=${auth}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: file.id })
+    });
+    assert.equal(finish.status, 200);
+  }
+
+  const state = await fetch(`${baseUrl}/api/state?session=${sessionId}`);
+  const data = await state.json();
+  assert.equal(data.history.length, 13);
+
+  const ids = data.history.map((item) => item.id);
+  const tokens = data.history.map((item) => new URL(item.downloadUrl, baseUrl).searchParams.get("token") || "");
+  const bundle = await fetch(`${baseUrl}/download/bundle?session=${sessionId}&ids=${ids.map(encodeURIComponent).join(",")}&tokens=${tokens.map(encodeURIComponent).join(",")}`);
+  assert.equal(bundle.status, 200);
+  assert.match(bundle.headers.get("content-type"), /application\/zip/);
+
+  const zip = Buffer.from(await bundle.arrayBuffer());
+  assert.equal(zip.includes(Buffer.from(files[0].fileName)), true);
+  assert.equal(zip.includes(Buffer.from(files[12].fileName)), true);
+});
+
 test("received image exposes preview URL", async () => {
   const { key, auth, sessionId } = await getSendCredentials();
   const id = `image-preview-${Date.now()}`;

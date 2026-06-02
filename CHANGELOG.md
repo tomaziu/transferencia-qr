@@ -12,6 +12,10 @@ e este projeto adota [Versionamento Semântico](https://semver.org/spec/v2.0.0.h
 - Atalho discreto de sugestões no rodapé, com envio para uma Issue do GitHub já preenchida.
 - Botão para copiar a sugestão pronta antes de enviar.
 
+### Corrigido
+
+- Histórico e download em ZIP dos recebidos agora mantêm até 200 arquivos por sessão, em vez de sumirem após 12.
+
 ## [1.3.0] - 2026-05-26
 
 ### Adicionado

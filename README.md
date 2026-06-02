@@ -33,7 +33,7 @@ Se você abrir o mesmo link **no celular**, verá uma tela de envio (não o pain
 - **Conexão por QR ou link:** página mobile com leitura pela câmera ou colagem manual do link.
 - **Progresso completo:** barra com velocidade e tempo restante, resultado com tempo total e média, prévia de imagens recebidas, e notificação sonora ao terminar.
 - **Transferência resiliente:** retomada automática em caso de queda de internet, botão para parar ou descartar o envio.
-- **Painel do computador:** status visual da sessão, lista de aparelhos conectados, limpeza de histórico, tema claro/escuro salvo, e escolha da pasta de destino (modo local).
+- **Painel do computador:** status visual da sessão, lista de aparelhos conectados, histórico de recebidos ampliado, tema claro/escuro salvo, e escolha da pasta de destino (modo local).
 - **Hospedado:** download pelo navegador; ideal para arquivos pequenos/médios sem instalação.
 
 ## Instalação Local
