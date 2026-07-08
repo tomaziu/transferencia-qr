@@ -65,7 +65,7 @@ function getLanAddresses() {
         address.startsWith("192.168.") ||
         /^172\.(1[6-9]|2\d|3[0-1])\./.test(address);
       const isLinkLocal = address.startsWith("169.254.");
-      const isVirtual = /virtual|vmware|hyper-v|loopback|vbox|docker|wsl/i.test(name);
+      const isVirtual = /virtual|vmware|hyper-v|loopback|vbox|docker|wsl|ethernet/i.test(name);
 
       results.push({
         name,
